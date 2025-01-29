@@ -51,7 +51,7 @@ export default function Home() {
             contactname
           )
         `)
-        .eq('customers.customerid', formData.customerId)
+        .eq('customers.customerid', parseInt(formData.customerId))
         .eq('username', formData.username)
         .eq('isactive', true)
         .eq('isdeleted', false)
