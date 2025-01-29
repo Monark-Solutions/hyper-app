@@ -1,101 +1,206 @@
-import Image from "next/image";
+"use client";
+import Link from 'next/link'
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Swal from 'sweetalert2';
+import supabase from '@/lib/supabase';
+import { comparePasswords } from '@/utils/password';
+
+type Customer = {
+  customerid: number;
+  companyname: string;
+  contactname: string;
+}
+
+type UserData = {
+  username: string;
+  password: string;
+  customers: Customer;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [formData, setFormData] = useState({
+    customerId: "",
+    username: "",
+    password: ""
+  });
+  const [isLoading, setIsLoading] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      // Get user data - may return multiple records
+      const { data: usersData, error: userError } = await supabase
+        .from('users')
+        .select(`
+          username,
+          password,
+          customers!inner(
+            customerid,
+            companyname,
+            contactname
+          )
+        `)
+        .eq('customers.customerid', formData.customerId)
+        .eq('username', formData.username)
+        .eq('isactive', true)
+        .eq('isdeleted', false)
+        .eq('customers.isactive', true);
+
+      if (userError) throw new Error(userError.message);
+      if (!usersData || usersData.length === 0) throw new Error('User not found');
+
+      // Try to find a user with matching password
+      let validUser = null;
+      for (const userData of usersData) {
+        const user = {
+          username: userData.username,
+          password: userData.password,
+          customers: userData.customers
+        } as unknown as UserData;
+
+        const isPasswordValid = await comparePasswords(formData.password, user.password);
+        if (isPasswordValid) {
+          validUser = user;
+          break;
+        }
+      }
+
+      if (validUser) {
+        // Store user details in localStorage
+        const userDetails = {
+          name: validUser.customers.contactname,
+          companyName: validUser.customers.companyname,
+          customerId: validUser.customers.customerid,
+          username: validUser.username
+        };
+        localStorage.setItem('userDetails', JSON.stringify(userDetails));
+
+        await Swal.fire({
+          title: 'Login Successful!',
+          text: `Welcome back, ${validUser.customers.contactname}!`,
+          icon: 'success',
+          confirmButtonText: 'OK'
+        });
+        
+        // Redirect to dashboard
+        window.location.href = '/dashboard';
+      } else {
+        await Swal.fire({
+          title: 'Invalid Credentials',
+          text: 'Please check your customer ID, username, and password',
+          icon: 'error',
+          confirmButtonText: 'OK'
+        });
+      }
+    } catch (err) {
+      await Swal.fire({
+        title: 'Login Failed',
+        text: err instanceof Error ? err.message : 'Invalid credentials',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
+      {/* Logo Header */}
+      <div className="mb-8 text-center">
+        <h1 className="text-4xl font-bold text-blue-600">Hyper</h1>
+      </div>
+
+      {/* Login Form */}
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          {/* Customer ID Input */}
+          <div>
+            <label htmlFor="customerId" className="block text-sm font-medium text-gray-700">
+              Customer ID
+            </label>
+            <input
+              type="text"
+              id="customerId"
+              name="customerId"
+              value={formData.customerId}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your customer ID"
+              required
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          {/* Username Input */}
+          <div>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              Username
+            </label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your username"
+              required
+            />
+          </div>
+
+          {/* Password Input */}
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your password"
+              required
+            />
+          </div>
+
+          {/* Forgot Password Link */}
+          <div className="text-right">
+            <Link href="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
+              Forgot password?
+            </Link>
+          </div>
+
+          {/* Login Button */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+            {isLoading ? 'Logging in...' : 'Login'}
+          </button>
+
+          {/* Sign Up Link */}
+          <div className="text-center mt-4">
+            <span className="text-sm text-gray-600">Don't have an account? </span>
+            <Link href="/signup" className="text-sm text-blue-600 hover:text-blue-500">
+              Sign up
+            </Link>
+          </div>
+        </form>
+      </div>
+    </main>
+  )
 }
