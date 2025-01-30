@@ -27,7 +27,7 @@ interface MediaItem {
   thumbnail: string;
   mediasize: string;
   mediaresolution: string;
-  tagassignment?: Array<{
+  mediatags?: Array<{
     tagid: number;
     tags: {
       tagname: string;
@@ -98,7 +98,7 @@ export default function Media() {
       .from('media')
       .select(`
         *,
-        tagassignment:tagassignment(
+        mediatags:mediatags(
           tagid,
           tags:tags(
             tagname
@@ -128,9 +128,8 @@ export default function Media() {
 
       if (matchingTags && matchingTags.length > 0) {
         const { data: taggedMedia } = await supabase
-          .from('tagassignment')
-          .select('elementid')
-          .eq('elementtype', 0)
+          .from('mediatags')
+          .select('mediaid')
           .in('tagid', matchingTags.map(t => t.tagid));
 
         // Build the query
@@ -141,7 +140,7 @@ export default function Media() {
         
         // Add tagged media condition if any found
         if (taggedMedia && taggedMedia.length > 0) {
-          conditions.push(`mediaid.in.(${taggedMedia.map(m => m.elementid).join(',')})`);
+          conditions.push(`mediaid.in.(${taggedMedia.map(m => m.mediaid).join(',')})`);
         }
         
         // Apply all conditions
@@ -333,16 +332,50 @@ export default function Media() {
       return;
     }
 
+    const totalFiles = selectedFiles.length;
+    let completedFiles = 0;
+
     for (const [index, fileData] of selectedFiles.entries()) {
       try {
-        setUploadProgress({}); // Reset progress for each file
-        
-        // Upload file to storage
+        // Initialize progress for this file
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 0
+        }));
+
+        // Create a progress tracker that smoothly increases during upload
+        let currentProgress = 0;
+        const progressInterval = setInterval(() => {
+          if (currentProgress < 90) {
+            // Faster progress at the start, slower towards the end
+            const increment = currentProgress < 30 ? 5 : 
+                            currentProgress < 60 ? 3 : 
+                            currentProgress < 80 ? 1 : 0.5;
+            
+            currentProgress += increment;
+            setUploadProgress(prev => ({
+              ...prev,
+              [fileData.file.name]: Math.min(90, currentProgress)
+            }));
+          }
+        }, 100);
+
+        // Perform the actual upload
         const { data: storageData, error: storageError } = await supabase.storage
           .from('MediaLibrary')
           .upload(`${customerId}/${fileData.file.name}`, fileData.file);
 
-        if (storageError) throw storageError;
+        if (storageError) {
+          clearInterval(progressInterval);
+          throw storageError;
+        }
+
+        // Clear interval and set to 95% after successful upload
+        clearInterval(progressInterval);
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 95
+        }));
 
         // Add record to media table
         const { data: mediaData, error: mediaError } = await supabase
@@ -363,19 +396,24 @@ export default function Media() {
         if (selectedTags.length > 0) {
           const tagAssignments = selectedTags.map(tag => ({
             tagid: tag.tagid,
-            elementid: mediaData[0].mediaid,
-            elementtype: 0
+            mediaid: mediaData[0].mediaid
           }));
 
           const { error: tagError } = await supabase
-            .from('tagassignment')
+            .from('mediatags')
             .insert(tagAssignments);
 
           if (tagError) throw tagError;
         }
 
-        // Update progress after successful upload
-        setUploadProgress({ [fileData.file.name]: 100 });
+        // Update progress to indicate completion
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 100
+        }));
+
+        completedFiles++;
+
       } catch (error) {
         console.error('Error uploading file:', error);
         Swal.fire({
@@ -406,12 +444,13 @@ export default function Media() {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Media Library</h1>
         <button
           onClick={() => {
             setIsDrawerOpen(true);
-            setUploadProgress({}); // Reset progress when opening drawer
+            setUploadProgress({});
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
         >
@@ -420,6 +459,7 @@ export default function Media() {
         </button>
       </div>
 
+      {/* Filter Buttons */}
       <div className="mb-6">
         <div className="flex space-x-4 mb-4">
           <button 
@@ -458,6 +498,8 @@ export default function Media() {
             Videos
           </button>
         </div>
+
+        {/* Search Bar */}
         <div className="relative flex items-center">
           <div className="flex-1 flex flex-wrap gap-2 px-4 py-2 border border-gray-300 rounded-md focus-within:ring-blue-500 focus-within:border-blue-500">
             {searchTerms.map((term, index) => (
@@ -530,26 +572,17 @@ export default function Media() {
         </div>
       </div>
 
+      {/* Media Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
         {mediaItems.map((item) => (
           <div key={item.mediaid} className="border rounded-lg overflow-hidden w-[280px]">
             <div className="aspect-w-16 aspect-h-9 bg-gray-100 flex items-center justify-center">
               {item.thumbnail ? (
                 <img 
-                  src={(() => {
-                    try {
-                      // Try parsing as JSON first
-                      //const parsed = JSON.parse(item.thumbnail);
-                      return `data:image/jpeg;base64,${item.thumbnail}`;
-                    } catch (e) {
-                      // If not JSON, assume it's already base64
-                      return `data:image/jpeg;base64,${item.thumbnail}`;
-                    }
-                  })()}
+                  src={`data:image/jpeg;base64,${item.thumbnail}`}
                   alt={item.medianame} 
                   className="object-cover w-full h-full" 
                   onError={(e) => {
-                    // If image fails to load, show fallback icon
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
                     target.parentElement?.querySelector('.fallback-icon')?.removeAttribute('style');
@@ -568,9 +601,9 @@ export default function Media() {
             <div className="p-4">
               <h3 className="font-medium text-gray-900">{item.medianame}</h3>
               <p className="text-sm text-gray-500 mt-1">{item.mediaresolution} • {item.mediasize}</p>
-              {item.tagassignment && item.tagassignment.length > 0 && (
+              {item.mediatags && item.mediatags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {item.tagassignment.map((ta) => (
+                  {item.mediatags.map((ta) => (
                     <span
                       key={ta.tagid}
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
@@ -585,6 +618,7 @@ export default function Media() {
         ))}
       </div>
 
+      {/* Load More Button */}
       <div className="mt-6 flex justify-center">
         {hasMore && (
           <button 
@@ -668,7 +702,6 @@ export default function Media() {
                                 setShowTagDropdown(true);
                               }}
                               onBlur={() => {
-                                // Delay hiding dropdown to allow click events to fire
                                 setTimeout(() => setShowTagDropdown(false), 200);
                               }}
                               placeholder="Type tag and press Enter"
@@ -733,20 +766,10 @@ export default function Media() {
                             <li key={index} className="py-3 flex items-center justify-between">
                               <div className="flex items-center">
                                 <img
-                                  src={(() => {
-                                    try {
-                                      // Try parsing as JSON first
-                                      const parsed = JSON.parse(file.thumbnail);
-                                      return `data:image/jpeg;base64,${Buffer.from(parsed.data).toString('base64')}`;
-                                    } catch (e) {
-                                      // If not JSON, assume it's already base64
-                                      return `data:image/jpeg;base64,${file.thumbnail}`;
-                                    }
-                                  })()}
+                                  src={`data:image/jpeg;base64,${file.thumbnail}`}
                                   alt={file.name}
                                   className="h-10 w-10 object-cover rounded"
                                   onError={(e) => {
-                                    // If image fails to load, show generic icon
                                     const target = e.target as HTMLImageElement;
                                     target.style.display = 'none';
                                     target.parentElement?.querySelector('.fallback-icon')?.removeAttribute('style');
