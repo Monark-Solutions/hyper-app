@@ -27,6 +27,7 @@ interface MediaItem {
   thumbnail: string;
   mediasize: string;
   mediaresolution: string;
+  uploaddatetime: string;
   mediatags?: Array<{
     tagid: number;
     tags: {
@@ -37,7 +38,14 @@ interface MediaItem {
 
 export default function Media() {
   const router = useRouter();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
+  const [isPropertiesDrawerOpen, setIsPropertiesDrawerOpen] = useState(false);
+  const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null);
+  const [activeTab, setActiveTab] = useState<'properties' | 'campaigns'>('properties');
+  const [selectedPropertyTags, setSelectedPropertyTags] = useState<Tag[]>([]);
+  const [propertyNewTag, setPropertyNewTag] = useState('');
+  const [showPropertyTagDropdown, setShowPropertyTagDropdown] = useState(false);
+  const [filteredPropertyTags, setFilteredPropertyTags] = useState<Tag[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
@@ -105,7 +113,8 @@ export default function Media() {
           )
         )
       `, { count: 'exact' })
-      .eq('customerid', customerId);
+      .eq('customerid', customerId)
+      .eq('isdeleted', false);
 
     // Apply media type filter
     if (mediaType !== 'all') {
@@ -162,6 +171,7 @@ export default function Media() {
         .from('media')
         .select('*')
         .eq('customerid', customerId)
+        .eq('isdeleted', false)
         .order('uploaddatetime', { ascending: false })
         .range(start, end);
 
@@ -172,6 +182,162 @@ export default function Media() {
       setMediaItems(append ? [...mediaItems, ...(media || [])] : (media || []));
       setHasMore(count ? (start + ITEMS_PER_PAGE) < count : false);
     }
+  };
+
+  const handlePropertyTagInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && propertyNewTag.trim()) {
+      e.preventDefault();
+      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+      const customerId = userDetails?.customerId;
+      if (!customerId) return;
+      const existingTag = tags.find(t => t.tagname.toLowerCase() === propertyNewTag.toLowerCase());
+      
+      if (!existingTag) {
+        const { data, error } = await supabase
+          .from('tags')
+          .insert([{ customerid: customerId, tagname: propertyNewTag }])
+          .select();
+
+        if (!error && data) {
+          setTags([...tags, data[0]]);
+          setSelectedPropertyTags([...selectedPropertyTags, data[0]]);
+        }
+      } else {
+        setSelectedPropertyTags([...selectedPropertyTags, existingTag]);
+      }
+      setPropertyNewTag('');
+    }
+  };
+
+  const handleUpdateTags = async () => {
+    if (!selectedMediaItem) return;
+
+    const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+    const customerId = userDetails?.customerId;
+    if (!customerId) return;
+
+    try {
+      // First delete existing tags
+      await supabase
+        .from('mediatags')
+        .delete()
+        .eq('mediaid', selectedMediaItem.mediaid);
+
+      // Then insert new tags
+      if (selectedPropertyTags.length > 0) {
+        const tagAssignments = selectedPropertyTags.map(tag => ({
+          tagid: tag.tagid,
+          mediaid: selectedMediaItem.mediaid
+        }));
+
+        const { error: insertError } = await supabase
+          .from('mediatags')
+          .insert(tagAssignments);
+
+        if (insertError) throw insertError;
+      }
+
+      // Show success message
+      Swal.fire({
+        title: 'Success',
+        text: 'Tags updated successfully!',
+        icon: 'success'
+      });
+
+      // Refresh media items
+      loadMediaItems(customerId, 1, false, selectedMediaType, searchTerms);
+      setIsPropertiesDrawerOpen(false);
+    } catch (error) {
+      console.error('Error updating tags:', error);
+      Swal.fire({
+        title: 'Error',
+        text: 'Failed to update tags',
+        icon: 'error'
+      });
+    }
+  };
+
+  const handleDeleteMedia = async () => {
+    if (!selectedMediaItem) return;
+
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'Associated campaigns will also be deleted. This action cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
+      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+      const customerId = userDetails?.customerId;
+      if (!customerId) return;
+
+      try {
+        // Update campaigns table
+        await supabase
+          .from('campaigns')
+          .update({ isdeleted: true })
+          .eq('mediaid', selectedMediaItem.mediaid);
+
+        // Update media table
+        await supabase
+          .from('media')
+          .update({ isdeleted: true })
+          .eq('mediaid', selectedMediaItem.mediaid);
+
+        // Show success message
+        Swal.fire(
+          'Deleted!',
+          'Media file has been deleted.',
+          'success'
+        );
+
+        // Refresh media items
+        loadMediaItems(customerId, 1, false, selectedMediaType, searchTerms);
+        setIsPropertiesDrawerOpen(false);
+      } catch (error) {
+        console.error('Error deleting media:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to delete media',
+          icon: 'error'
+        });
+      }
+    }
+  };
+
+  const handleTagInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newTag.trim()) {
+      e.preventDefault();
+      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+      const customerId = userDetails?.customerId;
+      if (!customerId) return;
+      const existingTag = tags.find(t => t.tagname.toLowerCase() === newTag.toLowerCase());
+      
+      if (!existingTag) {
+        const { data, error } = await supabase
+          .from('tags')
+          .insert([{ customerid: customerId, tagname: newTag }])
+          .select();
+
+        if (!error && data) {
+          setTags([...tags, data[0]]);
+          setSelectedTags([...selectedTags, data[0]]);
+        }
+      } else {
+        setSelectedTags([...selectedTags, existingTag]);
+      }
+      setNewTag('');
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const newFiles = [...selectedFiles];
+    newFiles.splice(index, 1);
+    setSelectedFiles(newFiles);
   };
 
   const { getRootProps, getInputProps } = useDropzone({
@@ -287,37 +453,6 @@ export default function Media() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleTagInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newTag.trim()) {
-      e.preventDefault();
-      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-      const customerId = userDetails?.customerId;
-      if (!customerId) return;
-      const existingTag = tags.find(t => t.tagname.toLowerCase() === newTag.toLowerCase());
-      
-      if (!existingTag) {
-        const { data, error } = await supabase
-          .from('tags')
-          .insert([{ customerid: customerId, tagname: newTag }])
-          .select();
-
-        if (!error && data) {
-          setTags([...tags, data[0]]);
-          setSelectedTags([...selectedTags, data[0]]);
-        }
-      } else {
-        setSelectedTags([...selectedTags, existingTag]);
-      }
-      setNewTag('');
-    }
-  };
-
-  const removeFile = (index: number) => {
-    const newFiles = [...selectedFiles];
-    newFiles.splice(index, 1);
-    setSelectedFiles(newFiles);
-  };
-
   const uploadFiles = async () => {
     setIsUploading(true);
     const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
@@ -427,7 +562,7 @@ export default function Media() {
     setIsUploading(false);
     setSelectedFiles([]);
     setSelectedTags([]);
-    setIsDrawerOpen(false);
+    setIsUploadDrawerOpen(false);
     
     // Reset page state and refresh both media and tags
     setPage(1);
@@ -449,7 +584,7 @@ export default function Media() {
         <h1 className="text-2xl font-semibold text-gray-900">Media Library</h1>
         <button
           onClick={() => {
-            setIsDrawerOpen(true);
+            setIsUploadDrawerOpen(true);
             setUploadProgress({});
           }}
           className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
@@ -575,7 +710,19 @@ export default function Media() {
       {/* Media Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
         {mediaItems.map((item) => (
-          <div key={item.mediaid} className="border rounded-lg overflow-hidden w-[280px]">
+          <div 
+            key={item.mediaid} 
+            className="border rounded-lg overflow-hidden w-[280px] cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            onClick={() => {
+              setSelectedMediaItem(item);
+              setIsPropertiesDrawerOpen(true);
+              setActiveTab('properties');
+              // Load tags for the selected media
+              const mediaTagIds = item.mediatags?.map(t => t.tagid) || [];
+              const mediaTags = tags.filter(t => mediaTagIds.includes(t.tagid));
+              setSelectedPropertyTags(mediaTags);
+            }}
+          >
             <div className="aspect-w-16 aspect-h-9 bg-gray-100 flex items-center justify-center">
               {item.thumbnail ? (
                 <img 
@@ -637,10 +784,201 @@ export default function Media() {
         )}
       </div>
 
+      {/* Properties Drawer */}
+      <Dialog
+        open={isPropertiesDrawerOpen}
+        onClose={() => setIsPropertiesDrawerOpen(false)}
+        className="fixed inset-0 overflow-hidden z-50"
+      >
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="fixed inset-0 bg-black bg-opacity-40" />
+          
+          <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+            <div className="w-screen max-w-md">
+              <div className="h-full flex flex-col bg-white shadow-xl">
+                {/* Header */}
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white relative z-10">
+                  <h2 className="text-lg font-medium text-gray-900">
+                    {selectedMediaItem?.medianame}
+                  </h2>
+                  <button
+                    onClick={() => setIsPropertiesDrawerOpen(false)}
+                    className="h-7 flex items-center"
+                  >
+                    <FiX className="w-6 h-6 text-gray-400" />
+                  </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="border-b border-gray-200">
+                  <nav className="flex -mb-px">
+                    <button
+                      onClick={() => setActiveTab('properties')}
+                      className={`${
+                        activeTab === 'properties'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } flex-1 py-4 px-1 text-center border-b-2 font-medium text-sm`}
+                    >
+                      Properties
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('campaigns')}
+                      className={`${
+                        activeTab === 'campaigns'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                      } flex-1 py-4 px-1 text-center border-b-2 font-medium text-sm`}
+                    >
+                      Campaigns
+                    </button>
+                  </nav>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto">
+                  {activeTab === 'properties' && selectedMediaItem && (
+                    <div className="p-6">
+                      {/* Preview */}
+                      <div className="mb-6">
+                        {selectedMediaItem.medianame.toLowerCase().endsWith('.mp4') ? (
+                          <video 
+                            src={supabase.storage.from('MediaLibrary').getPublicUrl(`${JSON.parse(localStorage.getItem('userDetails') || '{}').customerId}/${selectedMediaItem.medianame}`).data.publicUrl}
+                            controls
+                            className="w-full rounded-lg"
+                          />
+                        ) : (
+                          <img
+                            src={supabase.storage.from('MediaLibrary').getPublicUrl(`${JSON.parse(localStorage.getItem('userDetails') || '{}').customerId}/${selectedMediaItem.medianame}`).data.publicUrl}
+                            alt={selectedMediaItem.medianame}
+                            className="w-full rounded-lg"
+                          />
+                        )}
+                      </div>
+
+                      {/* File Details */}
+                      <div className="space-y-4 mb-6">
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">Resolution:</span>
+                          <span className="ml-2 text-sm text-gray-900">{selectedMediaItem.mediaresolution}</span>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">File Size:</span>
+                          <span className="ml-2 text-sm text-gray-900">{selectedMediaItem.mediasize}</span>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-gray-500">Upload Date:</span>
+                          <span className="ml-2 text-sm text-gray-900">
+                            {new Date(selectedMediaItem.uploaddatetime).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tags Input */}
+                      <div className="mb-6">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={propertyNewTag}
+                            onChange={(e) => {
+                              setPropertyNewTag(e.target.value);
+                              const filtered = tags.filter(tag => 
+                                tag.tagname.toLowerCase().includes(e.target.value.toLowerCase()) &&
+                                !selectedPropertyTags.some(st => st.tagid === tag.tagid)
+                              );
+                              setFilteredPropertyTags(filtered);
+                              setShowPropertyTagDropdown(true);
+                            }}
+                            onKeyDown={handlePropertyTagInput}
+                            onFocus={() => {
+                              const filtered = tags.filter(tag => 
+                                !selectedPropertyTags.some(st => st.tagid === tag.tagid)
+                              );
+                              setFilteredPropertyTags(filtered);
+                              setShowPropertyTagDropdown(true);
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => setShowPropertyTagDropdown(false), 200);
+                            }}
+                            placeholder="Type tag and press Enter"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          {showPropertyTagDropdown && filteredPropertyTags.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto">
+                              {filteredPropertyTags.map((tag, index) => (
+                                <div
+                                  key={`dropdown-${tag.tagid}-${index}`}
+                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedPropertyTags([...selectedPropertyTags, tag]);
+                                    setPropertyNewTag('');
+                                    setShowPropertyTagDropdown(false);
+                                  }}
+                                >
+                                  {tag.tagname}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {selectedPropertyTags.map((tag, index) => (
+                            <span
+                              key={`${tag.tagid}-${index}`}
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                            >
+                              {tag.tagname}
+                              <button
+                                onClick={() => setSelectedPropertyTags(selectedPropertyTags.filter(t => t.tagid !== tag.tagid))}
+                                className="ml-1.5 h-4 w-4 flex items-center justify-center"
+                              >
+                                <FiX className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'campaigns' && (
+                    <div className="p-6">
+                      {/* Campaigns tab content will be implemented later */}
+                      <p className="text-gray-500 text-center">No campaigns found</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                {activeTab === 'properties' && (
+                  <div className="flex-shrink-0 px-4 py-4 flex justify-between bg-gray-50">
+                    <button
+                      type="button"
+                      onClick={handleDeleteMedia}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUpdateTags}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Update
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+
       {/* Upload Drawer */}
       <Dialog
-        open={isDrawerOpen}
-        onClose={() => !isUploading && setIsDrawerOpen(false)}
+        open={isUploadDrawerOpen}
+        onClose={() => !isUploading && setIsUploadDrawerOpen(false)}
         className="fixed inset-0 overflow-hidden"
       >
         <div className="absolute inset-0 overflow-hidden">
@@ -656,7 +994,7 @@ export default function Media() {
                         Upload Media
                       </Dialog.Title>
                       <button
-                        onClick={() => !isUploading && setIsDrawerOpen(false)}
+                        onClick={() => !isUploading && setIsUploadDrawerOpen(false)}
                         className="ml-3 h-7 flex items-center"
                       >
                         <FiX className="w-6 h-6 text-gray-400" />
@@ -804,7 +1142,7 @@ export default function Media() {
                   <button
                     type="button"
                     className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    onClick={() => !isUploading && setIsDrawerOpen(false)}
+                    onClick={() => !isUploading && setIsUploadDrawerOpen(false)}
                     disabled={isUploading}
                   >
                     Cancel

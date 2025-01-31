@@ -29,6 +29,7 @@ export interface Campaign {
   customerid: string;
   playstate?: boolean;
   isdeleted: boolean;
+  duration?: number;
 }
 
 export interface CampaignScreen {

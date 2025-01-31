@@ -26,11 +26,13 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     mediaId: number;
     startDate: string;
     endDate: string;
+    duration: number;
   }>({
     campaignName: '',
     mediaId: mediaId,
     startDate: '',
     endDate: '',
+    duration: 7,
   });
 
   // Reset page when filters change
@@ -161,6 +163,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           mediaId: campaignData.mediaid,
           startDate: campaignData.startdate,
           endDate: campaignData.enddate,
+          duration: campaignData.duration || 7,
         });
 
         // Fetch associated screens
@@ -322,6 +325,14 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         return;
       }
 
+      // Validate duration for image files
+      const selectedMedia = media.find(item => item.mediaid === formData.mediaId);
+      const isImageFile = selectedMedia?.medianame?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/);
+      if (isImageFile && (!formData.duration || formData.duration <= 0)) {
+        Swal.fire('Error', 'Please enter a valid playback duration for image files', 'error');
+        return;
+      }
+
       // Validate date range
       const startDate = new Date(formData.startDate);
       const endDate = new Date(formData.endDate);
@@ -358,6 +369,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
             campaignname: formData.campaignName,
             startdate: formData.startDate,
             enddate: formData.endDate,
+            duration: formData.duration,
           })
           .eq('campaignid', campaignId);
 
@@ -381,6 +393,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
             enddate: formData.endDate,
             customerid: customerId,
             isdeleted: false,
+            duration: formData.duration,
           })
           .select()
           .single();
@@ -473,6 +486,19 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           className="hidden"
         />
 
+        {/* Campaign Name */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Campaign Name</label>
+          <input
+            type="text"
+            value={formData.campaignName}
+            onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
+            className={inputClasses}
+            required
+            autoFocus
+          />
+        </div>
+
         {/* Media File Dropdown */}
         <div>
           <label className="block text-sm font-medium text-gray-700">Media File</label>
@@ -501,17 +527,20 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           />
         </div>
 
-        {/* Campaign Name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Campaign Name</label>
-          <input
-            type="text"
-            value={formData.campaignName}
-            onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
-            className={inputClasses}
-            required
-          />
-        </div>
+        {/* Playback Duration for Image Files */}
+        {media.find(item => item.mediaid === formData.mediaId)?.medianame?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/) && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Playback Duration (in sec.)</label>
+            <input
+              type="number"
+              value={formData.duration}
+              onChange={(e) => setFormData({ ...formData, duration: Math.max(0, parseInt(e.target.value) || 0) })}
+              min="0"
+              className={inputClasses}
+              required
+            />
+          </div>
+        )}
 
         {/* Date Range */}
         <div className="grid grid-cols-2 gap-4">
