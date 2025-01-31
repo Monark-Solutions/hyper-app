@@ -60,18 +60,20 @@ export default function Campaign() {
     }
 
     const currentDate = new Date();
-    currentDate.setHours(0, 0, 0, 0);
+    const currentDateStr = currentDate.toISOString().split('T')[0];
 
     const processedCampaigns = data.map(campaign => {
       const startDate = new Date(campaign.startdate);
       const endDate = new Date(campaign.enddate);
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
       
-      let state: 'Active' | 'Scheduled' | 'Completed';
+      let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
       let progress = 0;
       let timeText = '';
 
       // Determine state and progress
-      if (currentDate >= startDate && currentDate <= endDate) {
+      if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
         state = 'Active';
         const totalDuration = endDate.getTime() - startDate.getTime();
         const elapsed = currentDate.getTime() - startDate.getTime();
@@ -86,7 +88,7 @@ export default function Campaign() {
         if (isSameDay(currentDate, endDate)) {
           timeText = 'Will End Today';
         }
-      } else if (currentDate < startDate) {
+      } else if (currentDateStr < startDateStr) {
         state = 'Scheduled';
         progress = 0;
 
@@ -95,7 +97,7 @@ export default function Campaign() {
         } else {
           timeText = `Starts in ${formatTimeAgo(startDate)}`;
         }
-      } else {
+      } else if (currentDateStr > endDateStr) {
         state = 'Completed';
         progress = 100;
 

@@ -4,7 +4,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { useDropzone } from 'react-dropzone';
-import { FiUpload, FiX, FiSearch, FiImage, FiVideo, FiTag, FiTrash2 } from 'react-icons/fi';
+import { FiUpload, FiX, FiSearch, FiImage, FiVideo, FiTag, FiTrash2, FiPlus } from 'react-icons/fi';
+import { BiBarChart, BiEdit, BiPause, BiPlay } from 'react-icons/bi';
+import CampaignForm from '@/components/CampaignForm';
+import type { Campaign } from '@/types/campaign';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
 
@@ -20,6 +23,12 @@ interface UploadFile {
   size: string;
   resolution: string;
 }
+
+type CampaignWithState = Campaign & { 
+  state: 'Active' | 'Scheduled' | 'Completed';
+  progress: number;
+  timeText: string;
+};
 
 interface MediaItem {
   mediaid: number;
@@ -40,8 +49,11 @@ export default function Media() {
   const router = useRouter();
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [isPropertiesDrawerOpen, setIsPropertiesDrawerOpen] = useState(false);
+  const [isCampaignDrawerOpen, setIsCampaignDrawerOpen] = useState(false);
   const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'campaigns'>('properties');
+  const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
+  const [editCampaignId, setEditCampaignId] = useState<number>(0);
   const [selectedPropertyTags, setSelectedPropertyTags] = useState<Tag[]>([]);
   const [propertyNewTag, setPropertyNewTag] = useState('');
   const [showPropertyTagDropdown, setShowPropertyTagDropdown] = useState(false);
@@ -62,24 +74,291 @@ export default function Media() {
   const [searchInput, setSearchInput] = useState('');
   const ITEMS_PER_PAGE = 8;
 
-  useEffect(() => {
-    const userDetailsStr = localStorage.getItem('userDetails');
-    if (!userDetailsStr) {
-      router.push('/');
-    } else {
-      try {
-        const userDetails = JSON.parse(userDetailsStr);
-        if (userDetails?.customerId) {
-          // Load existing tags and media
-          loadTags(userDetails.customerId);
-          loadMediaItems(userDetails.customerId, 1, false, selectedMediaType, searchTerms);
+  const formatTimeAgo = (date: Date, isEndDate: boolean = false) => {
+    const now = new Date();
+    const diffTime = Math.abs(date.getTime() - now.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffWeeks = Math.floor(diffDays / 7);
+
+    if (diffWeeks > 0) {
+      return `${diffWeeks} week${diffWeeks > 1 ? 's' : ''}`;
+    }
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+  };
+
+  const isSameDay = (date1: Date, date2: Date) => {
+    return date1.getFullYear() === date2.getFullYear() &&
+           date1.getMonth() === date2.getMonth() &&
+           date1.getDate() === date2.getDate();
+  };
+
+  const { getRootProps, getInputProps } = useDropzone({
+    accept: {
+      'image/*': [],
+      'video/*': []
+    },
+    onDrop: async (acceptedFiles) => {
+      const newFiles = await Promise.all(acceptedFiles.map(async (file) => {
+        const thumbnail = await generateThumbnail(file);
+        const resolution = await getFileResolution(file);
+        return {
+          file,
+          thumbnail,
+          name: file.name,
+          size: formatFileSize(file.size),
+          resolution
+        };
+      }));
+      setSelectedFiles([...selectedFiles, ...newFiles]);
+    }
+  });
+
+  const generateThumbnail = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Calculate new dimensions maintaining aspect ratio
+          if (width > height) {
+            if (width > 280) {
+              height = Math.round((height * 280) / width);
+              width = 280;
+            }
+          } else {
+            if (height > 280) {
+              width = Math.round((width * 280) / height);
+              height = 280;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          const base64String = canvas.toDataURL('image/jpeg').split(',')[1];
+          resolve(base64String);
+        };
+        img.src = URL.createObjectURL(file);
+      } else if (file.type.startsWith('video/')) {
+        const video = document.createElement('video');
+        const canvas = document.createElement('canvas');
+        
+        video.addEventListener('loadeddata', () => {
+          video.currentTime = 1;
+        });
+
+        video.addEventListener('seeked', () => {
+          let width = video.videoWidth;
+          let height = video.videoHeight;
+          
+          // Calculate new dimensions maintaining aspect ratio
+          if (width > height) {
+            if (width > 280) {
+              height = Math.round((height * 280) / width);
+              width = 280;
+            }
+          } else {
+            if (height > 280) {
+              width = Math.round((width * 280) / height);
+              height = 280;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext('2d')?.drawImage(video, 0, 0, width, height);
+          const base64String = canvas.toDataURL('image/jpeg').split(',')[1];
+          resolve(base64String);
+        });
+
+        video.src = URL.createObjectURL(file);
+        video.load();
+      }
+    });
+  };
+
+  const getFileResolution = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => resolve(`${img.width}x${img.height}`);
+        img.src = URL.createObjectURL(file);
+      } else if (file.type.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.onloadedmetadata = () => {
+          resolve(`${video.videoWidth}x${video.videoHeight}`);
+        };
+        video.src = URL.createObjectURL(file);
+      }
+    });
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleTagInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newTag.trim()) {
+      e.preventDefault();
+      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+      const customerId = userDetails?.customerId;
+      if (!customerId) return;
+      const existingTag = tags.find(t => t.tagname.toLowerCase() === newTag.toLowerCase());
+      
+      if (!existingTag) {
+        const { data, error } = await supabase
+          .from('tags')
+          .insert([{ customerid: customerId, tagname: newTag }])
+          .select();
+
+        if (!error && data) {
+          setTags([...tags, data[0]]);
+          setSelectedTags([...selectedTags, data[0]]);
         }
+      } else {
+        setSelectedTags([...selectedTags, existingTag]);
+      }
+      setNewTag('');
+    }
+  };
+
+  const removeFile = (index: number) => {
+    const newFiles = [...selectedFiles];
+    newFiles.splice(index, 1);
+    setSelectedFiles(newFiles);
+  };
+
+  const uploadFiles = async () => {
+    setIsUploading(true);
+    const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+    const customerId = userDetails?.customerId;
+    if (!customerId) {
+      Swal.fire({
+        title: 'Error',
+        text: 'User details not found',
+        icon: 'error'
+      });
+      setIsUploading(false);
+      return;
+    }
+
+    const totalFiles = selectedFiles.length;
+    let completedFiles = 0;
+
+    for (const [index, fileData] of selectedFiles.entries()) {
+      try {
+        // Initialize progress for this file
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 0
+        }));
+
+        // Create a progress tracker that smoothly increases during upload
+        let currentProgress = 0;
+        const progressInterval = setInterval(() => {
+          if (currentProgress < 90) {
+            // Faster progress at the start, slower towards the end
+            const increment = currentProgress < 30 ? 5 : 
+                            currentProgress < 60 ? 3 : 
+                            currentProgress < 80 ? 1 : 0.5;
+            
+            currentProgress += increment;
+            setUploadProgress(prev => ({
+              ...prev,
+              [fileData.file.name]: Math.min(90, currentProgress)
+            }));
+          }
+        }, 100);
+
+        // Perform the actual upload
+        const { data: storageData, error: storageError } = await supabase.storage
+          .from('MediaLibrary')
+          .upload(`${customerId}/${fileData.file.name}`, fileData.file);
+
+        if (storageError) {
+          clearInterval(progressInterval);
+          throw storageError;
+        }
+
+        // Clear interval and set to 95% after successful upload
+        clearInterval(progressInterval);
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 95
+        }));
+
+        // Add record to media table
+        const { data: mediaData, error: mediaError } = await supabase
+          .from('media')
+          .insert([{
+            customerid: customerId,
+            medianame: fileData.name,
+            thumbnail: fileData.thumbnail,
+            uploaddatetime: new Date().toISOString(),
+            mediasize: fileData.size,
+            mediaresolution: fileData.resolution
+          }])
+          .select();
+
+        if (mediaError) throw mediaError;
+
+        // Add tag assignments
+        if (selectedTags.length > 0) {
+          const tagAssignments = selectedTags.map(tag => ({
+            tagid: tag.tagid,
+            mediaid: mediaData[0].mediaid
+          }));
+
+          const { error: tagError } = await supabase
+            .from('mediatags')
+            .insert(tagAssignments);
+
+          if (tagError) throw tagError;
+        }
+
+        // Update progress to indicate completion
+        setUploadProgress(prev => ({
+          ...prev,
+          [fileData.file.name]: 100
+        }));
+
+        completedFiles++;
+
       } catch (error) {
-        console.error('Error parsing user details:', error);
-        router.push('/');
+        console.error('Error uploading file:', error);
+        Swal.fire({
+          title: 'Error',
+          text: `Error uploading ${fileData.name}`,
+          icon: 'error'
+        });
       }
     }
-  }, [router]);
+
+    setIsUploading(false);
+    setSelectedFiles([]);
+    setSelectedTags([]);
+    setIsUploadDrawerOpen(false);
+    
+    // Reset page state and refresh both media and tags
+    setPage(1);
+    setHasMore(true);
+    loadMediaItems(customerId, 1, false, selectedMediaType, searchTerms);
+    loadTags(customerId);
+    
+    Swal.fire({
+      title: 'Success',
+      text: 'Files uploaded successfully!',
+      icon: 'success'
+    });
+  };
 
   const loadTags = async (customerId: string) => {
     const { data: tags, error } = await supabase
@@ -181,6 +460,100 @@ export default function Media() {
     } else {
       setMediaItems(append ? [...mediaItems, ...(media || [])] : (media || []));
       setHasMore(count ? (start + ITEMS_PER_PAGE) < count : false);
+    }
+  };
+
+  const loadCampaigns = async (mediaid: number) => {
+    const userDetails = localStorage.getItem('userDetails');
+    if (!userDetails) return;
+    
+    const { customerId } = JSON.parse(userDetails);
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('customerid', customerId)
+      .eq('mediaid', mediaid)
+      .eq('isdeleted', false)
+      .order('startdate', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching campaigns:', error);
+      return;
+    }
+
+    const currentDate = new Date();
+    const currentDateStr = currentDate.toISOString().split('T')[0];
+
+    const processedCampaigns = data.map(campaign => {
+      const startDate = new Date(campaign.startdate);
+      const endDate = new Date(campaign.enddate);
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
+      let progress = 0;
+      let timeText = '';
+
+      // Determine state and progress
+      if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
+        state = 'Active';
+        const totalDuration = endDate.getTime() - startDate.getTime();
+        const elapsed = currentDate.getTime() - startDate.getTime();
+        progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
+
+        if (isSameDay(currentDate, startDate)) {
+          timeText = 'Started Today';
+        } else {
+          timeText = `Started ${formatTimeAgo(startDate)} ago`;
+        }
+
+        if (isSameDay(currentDate, endDate)) {
+          timeText = 'Will End Today';
+        }
+      } else if (currentDateStr < startDateStr) {
+        state = 'Scheduled';
+        progress = 0;
+
+        if (isSameDay(currentDate, startDate)) {
+          timeText = 'Starts Today';
+        } else {
+          timeText = `Starts in ${formatTimeAgo(startDate)}`;
+        }
+      } else if (currentDateStr > endDateStr) {
+        state = 'Completed';
+        progress = 100;
+
+        if (isSameDay(currentDate, endDate)) {
+          timeText = 'Ended Today';
+        } else {
+          timeText = `Ended ${formatTimeAgo(endDate)} ago`;
+        }
+      }
+
+      return { ...campaign, state, progress, timeText };
+    });
+
+    setCampaigns(processedCampaigns);
+  };
+
+  const handlePlayStateUpdate = async (campaignId: number, newPlayState: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('campaigns')
+        .update({ playstate: newPlayState })
+        .eq('campaignid', campaignId);
+
+      if (error) {
+        console.error('Error updating play state:', error);
+        return;
+      }
+
+      // Immediately refresh the campaign list
+      if (selectedMediaItem) {
+        await loadCampaigns(selectedMediaItem.mediaid);
+      }
+    } catch (error) {
+      console.error('Error updating play state:', error);
     }
   };
 
@@ -309,273 +682,36 @@ export default function Media() {
     }
   };
 
-  const handleTagInput = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && newTag.trim()) {
-      e.preventDefault();
-      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-      const customerId = userDetails?.customerId;
-      if (!customerId) return;
-      const existingTag = tags.find(t => t.tagname.toLowerCase() === newTag.toLowerCase());
-      
-      if (!existingTag) {
-        const { data, error } = await supabase
-          .from('tags')
-          .insert([{ customerid: customerId, tagname: newTag }])
-          .select();
-
-        if (!error && data) {
-          setTags([...tags, data[0]]);
-          setSelectedTags([...selectedTags, data[0]]);
-        }
-      } else {
-        setSelectedTags([...selectedTags, existingTag]);
+  useEffect(() => {
+    const handleCloseCampaignDrawer = () => {
+      setIsCampaignDrawerOpen(false);
+      setEditCampaignId(0);
+      if (selectedMediaItem) {
+        loadCampaigns(selectedMediaItem.mediaid);
       }
-      setNewTag('');
-    }
-  };
+    };
+    window.addEventListener('closeDrawer', handleCloseCampaignDrawer);
+    return () => window.removeEventListener('closeDrawer', handleCloseCampaignDrawer);
+  }, [selectedMediaItem]);
 
-  const removeFile = (index: number) => {
-    const newFiles = [...selectedFiles];
-    newFiles.splice(index, 1);
-    setSelectedFiles(newFiles);
-  };
-
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      'image/*': [],
-      'video/*': []
-    },
-    onDrop: async (acceptedFiles) => {
-      const newFiles = await Promise.all(acceptedFiles.map(async (file) => {
-        const thumbnail = await generateThumbnail(file);
-        const resolution = await getFileResolution(file);
-        return {
-          file,
-          thumbnail,
-          name: file.name,
-          size: formatFileSize(file.size),
-          resolution
-        };
-      }));
-      setSelectedFiles([...selectedFiles, ...newFiles]);
-    }
-  });
-
-  const generateThumbnail = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      if (file.type.startsWith('image/')) {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          // Calculate new dimensions maintaining aspect ratio
-          if (width > height) {
-            if (width > 280) {
-              height = Math.round((height * 280) / width);
-              width = 280;
-            }
-          } else {
-            if (height > 280) {
-              width = Math.round((width * 280) / height);
-              height = 280;
-            }
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          const base64String = canvas.toDataURL('image/jpeg').split(',')[1];
-          resolve(base64String);
-        };
-        img.src = URL.createObjectURL(file);
-      } else if (file.type.startsWith('video/')) {
-        const video = document.createElement('video');
-        const canvas = document.createElement('canvas');
-        
-        video.addEventListener('loadeddata', () => {
-          video.currentTime = 1;
-        });
-
-        video.addEventListener('seeked', () => {
-          let width = video.videoWidth;
-          let height = video.videoHeight;
-          
-          // Calculate new dimensions maintaining aspect ratio
-          if (width > height) {
-            if (width > 280) {
-              height = Math.round((height * 280) / width);
-              width = 280;
-            }
-          } else {
-            if (height > 280) {
-              width = Math.round((width * 280) / height);
-              height = 280;
-            }
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext('2d')?.drawImage(video, 0, 0, width, height);
-          const base64String = canvas.toDataURL('image/jpeg').split(',')[1];
-          resolve(base64String);
-        });
-
-        video.src = URL.createObjectURL(file);
-        video.load();
-      }
-    });
-  };
-
-  const getFileResolution = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      if (file.type.startsWith('image/')) {
-        const img = new Image();
-        img.onload = () => resolve(`${img.width}x${img.height}`);
-        img.src = URL.createObjectURL(file);
-      } else if (file.type.startsWith('video/')) {
-        const video = document.createElement('video');
-        video.onloadedmetadata = () => {
-          resolve(`${video.videoWidth}x${video.videoHeight}`);
-        };
-        video.src = URL.createObjectURL(file);
-      }
-    });
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const uploadFiles = async () => {
-    setIsUploading(true);
-    const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-    const customerId = userDetails?.customerId;
-    if (!customerId) {
-      Swal.fire({
-        title: 'Error',
-        text: 'User details not found',
-        icon: 'error'
-      });
-      setIsUploading(false);
-      return;
-    }
-
-    const totalFiles = selectedFiles.length;
-    let completedFiles = 0;
-
-    for (const [index, fileData] of selectedFiles.entries()) {
+  useEffect(() => {
+    const userDetailsStr = localStorage.getItem('userDetails');
+    if (!userDetailsStr) {
+      router.push('/');
+    } else {
       try {
-        // Initialize progress for this file
-        setUploadProgress(prev => ({
-          ...prev,
-          [fileData.file.name]: 0
-        }));
-
-        // Create a progress tracker that smoothly increases during upload
-        let currentProgress = 0;
-        const progressInterval = setInterval(() => {
-          if (currentProgress < 90) {
-            // Faster progress at the start, slower towards the end
-            const increment = currentProgress < 30 ? 5 : 
-                            currentProgress < 60 ? 3 : 
-                            currentProgress < 80 ? 1 : 0.5;
-            
-            currentProgress += increment;
-            setUploadProgress(prev => ({
-              ...prev,
-              [fileData.file.name]: Math.min(90, currentProgress)
-            }));
-          }
-        }, 100);
-
-        // Perform the actual upload
-        const { data: storageData, error: storageError } = await supabase.storage
-          .from('MediaLibrary')
-          .upload(`${customerId}/${fileData.file.name}`, fileData.file);
-
-        if (storageError) {
-          clearInterval(progressInterval);
-          throw storageError;
+        const userDetails = JSON.parse(userDetailsStr);
+        if (userDetails?.customerId) {
+          // Load existing tags and media
+          loadTags(userDetails.customerId);
+          loadMediaItems(userDetails.customerId, 1, false, selectedMediaType, searchTerms);
         }
-
-        // Clear interval and set to 95% after successful upload
-        clearInterval(progressInterval);
-        setUploadProgress(prev => ({
-          ...prev,
-          [fileData.file.name]: 95
-        }));
-
-        // Add record to media table
-        const { data: mediaData, error: mediaError } = await supabase
-          .from('media')
-          .insert([{
-            customerid: customerId,
-            medianame: fileData.name,
-            thumbnail: fileData.thumbnail,
-            uploaddatetime: new Date().toISOString(),
-            mediasize: fileData.size,
-            mediaresolution: fileData.resolution
-          }])
-          .select();
-
-        if (mediaError) throw mediaError;
-
-        // Add tag assignments
-        if (selectedTags.length > 0) {
-          const tagAssignments = selectedTags.map(tag => ({
-            tagid: tag.tagid,
-            mediaid: mediaData[0].mediaid
-          }));
-
-          const { error: tagError } = await supabase
-            .from('mediatags')
-            .insert(tagAssignments);
-
-          if (tagError) throw tagError;
-        }
-
-        // Update progress to indicate completion
-        setUploadProgress(prev => ({
-          ...prev,
-          [fileData.file.name]: 100
-        }));
-
-        completedFiles++;
-
       } catch (error) {
-        console.error('Error uploading file:', error);
-        Swal.fire({
-          title: 'Error',
-          text: `Error uploading ${fileData.name}`,
-          icon: 'error'
-        });
+        console.error('Error parsing user details:', error);
+        router.push('/');
       }
     }
-
-    setIsUploading(false);
-    setSelectedFiles([]);
-    setSelectedTags([]);
-    setIsUploadDrawerOpen(false);
-    
-    // Reset page state and refresh both media and tags
-    setPage(1);
-    setHasMore(true);
-    loadMediaItems(customerId, 1, false, selectedMediaType, searchTerms);
-    loadTags(customerId);
-    
-    Swal.fire({
-      title: 'Success',
-      text: 'Files uploaded successfully!',
-      icon: 'success'
-    });
-  };
+  }, [router, selectedMediaType, searchTerms]);
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -717,6 +853,7 @@ export default function Media() {
               setSelectedMediaItem(item);
               setIsPropertiesDrawerOpen(true);
               setActiveTab('properties');
+              loadCampaigns(item.mediaid);
               // Load tags for the selected media
               const mediaTagIds = item.mediatags?.map(t => t.tagid) || [];
               const mediaTags = tags.filter(t => mediaTagIds.includes(t.tagid));
@@ -783,7 +920,6 @@ export default function Media() {
           </button>
         )}
       </div>
-
       {/* Properties Drawer */}
       <Dialog
         open={isPropertiesDrawerOpen}
@@ -942,10 +1078,91 @@ export default function Media() {
                     </div>
                   )}
 
-                  {activeTab === 'campaigns' && (
+                  {activeTab === 'campaigns' && selectedMediaItem && (
                     <div className="p-6">
-                      {/* Campaigns tab content will be implemented later */}
-                      <p className="text-gray-500 text-center">No campaigns found</p>
+                      <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-lg font-medium text-gray-900">Media Campaigns</h2>
+                        <button 
+                          onClick={() => {
+                            setEditCampaignId(0);
+                            setIsCampaignDrawerOpen(true);
+                          }}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <FiPlus className="w-4 h-4" />
+                          Add Campaign
+                        </button>
+                      </div>
+
+                      <div className="space-y-4">
+                        {campaigns.map(campaign => (
+                          <div key={campaign.campaignid} className="border rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <h3 className="font-medium text-gray-900">{campaign.campaignname}</h3>
+                                <p className="text-sm text-gray-500 mt-1">{campaign.state} • {campaign.timeText}</p>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <button className="text-gray-600 hover:text-gray-800">
+                                  <BiBarChart size={20} />
+                                </button>
+                                {(campaign.state === 'Active' || campaign.state === 'Scheduled' || campaign.state === 'Completed') && (
+                                  <button 
+                                    className="text-gray-600 hover:text-gray-800"
+                                    onClick={() => {
+                                      setEditCampaignId(campaign.campaignid);
+                                      setIsCampaignDrawerOpen(true);
+                                    }}
+                                  >
+                                    <BiEdit size={20} />
+                                  </button>
+                                )}
+                                {campaign.state === 'Active' && (
+                                  (campaign.playstate === null || campaign.playstate === true) ? (
+                                    <button 
+                                      className="text-gray-600 hover:text-gray-800"
+                                      onClick={() => handlePlayStateUpdate(campaign.campaignid, false)}
+                                    >
+                                      <BiPause size={20} />
+                                    </button>
+                                  ) : (
+                                    <button 
+                                      className="text-gray-600 hover:text-gray-800"
+                                      onClick={() => handlePlayStateUpdate(campaign.campaignid, true)}
+                                    >
+                                      <BiPlay size={20} />
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full ${
+                                    campaign.state === 'Completed' 
+                                      ? 'bg-green-600' 
+                                      : campaign.state === 'Active' 
+                                        ? 'bg-blue-600' 
+                                        : 'bg-gray-400'
+                                  }`} 
+                                  style={{ width: `${campaign.progress}%` }}
+                                ></div>
+                              </div>
+                              <p className="text-sm text-gray-500 mt-1">
+                                {campaign.state === 'Completed' 
+                                  ? 'Campaign completed'
+                                  : campaign.state === 'Scheduled'
+                                    ? 'Not started'
+                                    : `${campaign.progress}% Completed`}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {campaigns.length === 0 && (
+                          <p className="text-gray-500 text-center">No campaigns found</p>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1155,6 +1372,63 @@ export default function Media() {
                   >
                     {isUploading ? 'Uploading...' : 'Upload Files'}
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Campaign Form Drawer */}
+      <Dialog
+        open={isCampaignDrawerOpen}
+        onClose={() => setIsCampaignDrawerOpen(false)}
+        className="fixed inset-0 overflow-hidden z-[60]"
+      >
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="fixed inset-0 bg-black bg-opacity-40" />
+          
+          <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
+            <div className="w-screen max-w-md">
+              <div className="h-full flex flex-col bg-white shadow-xl">
+                <div className="flex-1 h-0 overflow-y-auto">
+                  <div className="p-6">
+                    <CampaignForm 
+                      campaignId={editCampaignId} 
+                      mediaId={selectedMediaItem?.mediaid || 0} 
+                    />
+                  </div>
+                </div>
+                <div className="flex-shrink-0 px-4 py-4 flex justify-end bg-gray-50">
+                  <div className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      onClick={() => setIsCampaignDrawerOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    {editCampaignId > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const form = document.getElementById('campaign-form') as HTMLFormElement;
+                          const deleteButton = form.querySelector('[data-action="delete"]') as HTMLButtonElement;
+                          deleteButton?.click();
+                        }}
+                        className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Delete Campaign
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      form="campaign-form"
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
