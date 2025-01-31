@@ -17,6 +17,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const screensPerPage = 100;
   const [formData, setFormData] = useState<{
     campaignName: string;
     mediaId: number;
@@ -28,6 +30,11 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     startDate: '',
     endDate: '',
   });
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredScreens.length]);
 
   // Check user authentication
   useEffect(() => {
@@ -277,6 +284,60 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         return;
       }
 
+      // Form validation
+      if (!formData.mediaId) {
+        Swal.fire('Error', 'Please select a media file', 'error');
+        return;
+      }
+
+      if (!formData.campaignName.trim()) {
+        Swal.fire('Error', 'Please enter a campaign name', 'error');
+        return;
+      }
+
+      if (!formData.startDate) {
+        Swal.fire('Error', 'Please select a start date', 'error');
+        return;
+      }
+
+      if (!formData.endDate) {
+        Swal.fire('Error', 'Please select an end date', 'error');
+        return;
+      }
+
+      if (selectedScreens.size === 0) {
+        Swal.fire('Error', 'Please select at least one screen', 'error');
+        return;
+      }
+
+      // Validate date range
+      const startDate = new Date(formData.startDate);
+      const endDate = new Date(formData.endDate);
+      const currentDate = new Date();
+      currentDate.setHours(0, 0, 0, 0);
+
+      if (endDate < startDate) {
+        Swal.fire('Error', 'End date cannot be before start date', 'error');
+        return;
+      }
+
+      // Check for campaigns with exact same dates
+      const { data: existingCampaigns, error: campaignError } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('customerid', customerId)
+        .eq('startdate', formData.startDate)
+        .eq('enddate', formData.endDate)
+        .eq('isdeleted', false)
+        .neq('campaignid', campaignId || 0);
+
+      if (campaignError) throw campaignError;
+
+      if (existingCampaigns && existingCampaigns.length > 0) {
+        Swal.fire('Error', 'A campaign with these exact dates already exists', 'error');
+        return;
+      }
+
       if (campaignId > 0) {
         // Update existing campaign
         const { error: updateError } = await supabase
@@ -307,6 +368,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
             startdate: formData.startDate,
             enddate: formData.endDate,
             customerid: customerId,
+            isdeleted: false,
           })
           .select()
           .single();
@@ -332,7 +394,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         if (screenError) throw screenError;
       }
 
-      Swal.fire('Success', 'Campaign saved successfully', 'success');
+      Swal.fire('Success', 'Campaign saved successfully', 'success').then(() => {
+        // Dispatch custom event to refresh campaign list and close drawer
+        window.dispatchEvent(new Event('closeDrawer'));
+      });
     } catch (error) {
       console.error('Error saving campaign:', error);
       Swal.fire('Error', 'Failed to save campaign', 'error');
@@ -355,23 +420,17 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
     if (result.isConfirmed) {
       try {
-        // Delete campaign screens first
-        const { error: screenError } = await supabase
-          .from('campaignscreens')
-          .delete()
-          .eq('campaignid', campaignId);
-
-        if (screenError) throw screenError;
-
-        // Then delete the campaign
-        const { error: campaignError } = await supabase
+        // Update campaign isdeleted to true
+        const { error: updateError } = await supabase
           .from('campaigns')
-          .delete()
+          .update({ isdeleted: true })
           .eq('campaignid', campaignId);
 
-        if (campaignError) throw campaignError;
+        if (updateError) throw updateError;
 
-        Swal.fire('Deleted!', 'Campaign has been deleted.', 'success');
+        Swal.fire('Deleted!', 'Campaign has been deleted.', 'success').then(() => {
+          window.dispatchEvent(new Event('closeDrawer'));
+        });
       } catch (error) {
         console.error('Error deleting campaign:', error);
         Swal.fire('Error', 'Failed to delete campaign', 'error');
@@ -383,13 +442,25 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const selectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
   const searchInputClasses = "w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 pr-20";
 
-  return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">
-        {campaignId > 0 ? 'Edit Campaign' : 'Create Campaign'}
-      </h1>
+  // Get current page's screens
+  const indexOfLastScreen = currentPage * screensPerPage;
+  const indexOfFirstScreen = indexOfLastScreen - screensPerPage;
+  const currentScreens = filteredScreens.slice(indexOfFirstScreen, indexOfLastScreen);
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+  // Get current date in YYYY-MM-DD format for min attribute
+  const today = new Date().toISOString().split('T')[0];
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      <form id="campaign-form" onSubmit={handleSubmit} className="space-y-6">
+        {/* Hidden delete button for parent component to trigger */}
+        <button
+          type="button"
+          data-action="delete"
+          onClick={handleDelete}
+          className="hidden"
+        />
+
         {/* Media File Dropdown */}
         <div>
           <label className="block text-sm font-medium text-gray-700">Media File</label>
@@ -438,6 +509,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.startDate}
               onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+              min={today}
               className={inputClasses}
               required
             />
@@ -448,6 +520,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.endDate}
               onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+              min={formData.startDate || today}
               className={inputClasses}
               required
             />
@@ -456,7 +529,12 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
         {/* Screens Section */}
         <div>
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Select Screens</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900">Select Screens</h2>
+            <span className="text-sm text-gray-500">
+              {selectedScreens.size} {selectedScreens.size === 1 ? 'screen' : 'screens'} selected
+            </span>
+          </div>
           
           {/* Search Box */}
           <div className="flex gap-2 mb-4">
@@ -515,79 +593,91 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
           {/* Screens Table */}
           <div className="border rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
-                      checked={selectedScreens.size === filteredScreens.length}
-                      onChange={handleSelectAll}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Screen Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Location
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tags
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredScreens.map((screen) => (
-                  <tr key={screen.screenid}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+            <div className="max-h-[400px] overflow-y-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <input
                         type="checkbox"
-                        checked={selectedScreens.has(screen.screenid)}
-                        onChange={() => handleScreenSelect(screen.screenid)}
+                        checked={selectedScreens.size === filteredScreens.length}
+                        onChange={handleSelectAll}
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{screen.screenname}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{screen.screenlocation}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {screen.tags.map((tag) => (
-                          <span
-                            key={tag.tagid}
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
-                          >
-                            {tag.tagname}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Screen Name
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Location
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tags
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentScreens.map((screen) => (
+                    <tr key={screen.screenid}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <input
+                          type="checkbox"
+                          checked={selectedScreens.has(screen.screenid)}
+                          onChange={() => handleScreenSelect(screen.screenid)}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">{screen.screenname}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">{screen.screenlocation}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {screen.tags.map((tag) => (
+                            <span
+                              key={tag.tagid}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                            >
+                              {tag.tagname}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-        {/* Action Buttons */}
-        <div className="flex justify-between">
-          <div>
-            {campaignId > 0 && (
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-              >
-                Delete this campaign
-              </button>
+            {/* Pagination */}
+            {filteredScreens.length > screensPerPage && (
+              <div className="border-t border-gray-200 px-6 py-4 bg-white">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    Showing {Math.min((currentPage - 1) * screensPerPage + 1, filteredScreens.length)} to{' '}
+                    {Math.min(currentPage * screensPerPage, filteredScreens.length)} of{' '}
+                    {filteredScreens.length} screens
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredScreens.length / screensPerPage)))}
+                      disabled={currentPage >= Math.ceil(filteredScreens.length / screensPerPage)}
+                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-          <button
-            type="submit"
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            {campaignId > 0 ? 'Update Campaign' : 'Create Campaign'}
-          </button>
         </div>
       </form>
     </div>
