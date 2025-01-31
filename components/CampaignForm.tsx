@@ -18,6 +18,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const [searchTerm, setSearchTerm] = useState('');
   const [searchTags, setSearchTags] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFilteredOnly, setShowFilteredOnly] = useState(false);
+  const [showAllLink, setShowAllLink] = useState(false);
   const screensPerPage = 100;
   const [formData, setFormData] = useState<{
     campaignName: string;
@@ -190,14 +192,18 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
       setSearchTags(newTags);
       setSearchTerm('');
       // Search with updated tags
-      handleSearchWithTags(newTags, '');
+      if (!showFilteredOnly) {
+        handleSearchWithTags(newTags, '');
+      }
     } else if (e.key === 'Backspace' && !searchTerm && searchTags.length > 0) {
       e.preventDefault();
       const newTags = [...searchTags];
       newTags.pop();
       setSearchTags(newTags);
       // Search with updated tags
-      handleSearchWithTags(newTags, '');
+      if (!showFilteredOnly) {
+        handleSearchWithTags(newTags, '');
+      }
     }
   };
 
@@ -206,7 +212,9 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     const newTags = searchTags.filter(tag => tag !== tagToRemove);
     setSearchTags(newTags);
     // Search with updated tags
-    handleSearchWithTags(newTags, searchTerm);
+    if (!showFilteredOnly) {
+      handleSearchWithTags(newTags, searchTerm);
+    }
   };
 
   // Helper function to handle search with given tags and term
@@ -235,14 +243,18 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
   // Handle screen search button click
   const handleSearch = () => {
-    handleSearchWithTags(searchTags, searchTerm);
+    if (!showFilteredOnly) {
+      handleSearchWithTags(searchTags, searchTerm);
+    }
   };
 
   // Handle search clear
   const handleClearSearch = () => {
     setSearchTerm('');
     setSearchTags([]);
-    setFilteredScreens(screens);
+    if (!showFilteredOnly) {
+      setFilteredScreens(screens);
+    }
   };
 
   // Handle screen selection
@@ -531,9 +543,32 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">Select Screens</h2>
-            <span className="text-sm text-gray-500">
-              {selectedScreens.size} {selectedScreens.size === 1 ? 'screen' : 'screens'} selected
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowFilteredOnly(true);
+                  setShowAllLink(true);
+                  setFilteredScreens(screens.filter(screen => selectedScreens.has(screen.screenid)));
+                }}
+                className="text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                {selectedScreens.size} {selectedScreens.size === 1 ? 'screen' : 'screens'} selected
+              </button>
+              {showAllLink && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFilteredOnly(false);
+                    setShowAllLink(false);
+                    setFilteredScreens(screens);
+                  }}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  All
+                </button>
+              )}
+            </div>
           </div>
           
           {/* Search Box */}
