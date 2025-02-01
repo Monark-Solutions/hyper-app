@@ -364,7 +364,8 @@ export default function Media() {
     const { data: tags, error } = await supabase
       .from('tags')
       .select('*')
-      .eq('customerid', customerId);
+      .eq('customerid', customerId)
+      .eq('isdeleted',false);
 
     if (!error && tags) {
       setTags(tags);

@@ -657,11 +657,11 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
           {/* Screens Table */}
           <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-[400px] overflow-y-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 table-fixed md:table-auto">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[50px] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       <input
                         type="checkbox"
                         checked={selectedScreens.size === filteredScreens.length}
@@ -669,13 +669,13 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[25%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Screen Name
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[30%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Location
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="w-[45%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tags
                     </th>
                   </tr>
@@ -683,7 +683,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentScreens.map((screen) => (
                     <tr key={screen.screenid}>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 md:px-6 py-4">
                         <input
                           type="checkbox"
                           checked={selectedScreens.has(screen.screenid)}
@@ -691,14 +691,15 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">{screen.screenname}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">{screen.screenlocation}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 md:px-6 py-4 truncate" title={screen.screenname}>{screen.screenname}</td>
+                      <td className="px-3 md:px-6 py-4 truncate" title={screen.screenlocation}>{screen.screenlocation}</td>
+                      <td className="px-3 md:px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {screen.tags.map((tag) => (
                             <span
                               key={tag.tagid}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 max-w-[150px] truncate"
+                              title={tag.tagname}
                             >
                               {tag.tagname}
                             </span>
