@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiPlus } from 'react-icons/fi';
+import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiTrash2, FiPlus } from 'react-icons/fi';
 import Select from 'react-select';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
@@ -25,6 +25,18 @@ interface Tag {
   tagname: string;
 }
 
+interface Campaign {
+  campaignid: number;
+  campaignname: string;
+  startdate: string;
+  enddate: string;
+  mediaid: number;
+  customerid: number;
+  isdeleted: boolean;
+  playstate: boolean;
+  duration: number;
+}
+
 interface Screen {
   id: number;
   screenid: string;
@@ -37,7 +49,7 @@ interface Screen {
   tags: number[];
 }
 
-export default function Screens() {
+export default function Screens(): React.ReactElement {
   const router = useRouter();
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'online' | 'offline'>('all');
   const [searchTerms, setSearchTerms] = useState<string[]>([]);
@@ -49,6 +61,7 @@ export default function Screens() {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'configuration' | 'campaigns'>('configuration');
   const [screenDetails, setScreenDetails] = useState<ScreenDetails | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const screenNameInputRef = useRef<HTMLInputElement>(null);
   const didFetch = useRef(false);
 
@@ -151,8 +164,85 @@ export default function Screens() {
     }
   };
 
+  const loadCampaigns = async (screenId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('campaignscreens')
+        .select(`
+          campaigns!inner (
+            campaignid,
+            campaignname,
+            startdate,
+            enddate,
+            mediaid,
+            customerid,
+            isdeleted,
+            playstate,
+            duration
+          )
+        `)
+        .eq('screenid', screenId)
+        .eq('campaigns.isdeleted', false) as { data: { campaigns: Campaign }[] | null, error: any };
+
+      if (error) {
+        console.error('Error fetching campaigns:', error);
+        return;
+      }
+
+      if (!data) {
+        setCampaigns([]);
+        return;
+      }
+
+      const campaignsList = data?.map(item => item.campaigns) || [];
+
+      setCampaigns(campaignsList);
+    } catch (error) {
+      console.error('Error loading campaigns:', error);
+    }
+  };
+
+  const handleDeleteCampaign = async (campaignId: number) => {
+    try {
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Yes, delete it!'
+      });
+
+      if (result.isConfirmed) {
+        const { error } = await supabase
+          .from('campaignscreens')
+          .delete()
+          .eq('campaignid', campaignId)
+          .eq('screenid', screenDetails?.screenid);
+
+        if (error) {
+          console.error('Error deleting campaign:', error);
+          Swal.fire('Error', 'Failed to delete campaign', 'error');
+          return;
+        }
+
+        // Refresh campaigns list
+        if (screenDetails?.screenid) {
+          loadCampaigns(screenDetails.screenid);
+        }
+
+        Swal.fire('Deleted!', 'Campaign has been deleted.', 'success');
+      }
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      Swal.fire('Error', 'Failed to delete campaign', 'error');
+    }
+  };
+
   const handleScreenClick = async (screenId: string) => {
     setSelectedScreenId(screenId);
+    setActiveTab('configuration'); // Reset to configuration tab when opening drawer
     
     try {
       // First get the screen details to get the id
@@ -187,6 +277,9 @@ export default function Screens() {
       
       setScreenDetails(screenDetailsWithTags);
       setIsDrawerOpen(true);
+
+      // Load campaigns when screen is opened
+      loadCampaigns(screenData.screenid);
     } catch (error) {
       console.error('Error loading screen data:', error);
       Swal.fire('Error', 'Failed to load screen details', 'error');
@@ -292,6 +385,13 @@ export default function Screens() {
     didFetch.current = true;
     fetchScreens();
   }, [router]);
+
+  // Load campaigns when switching to campaigns tab
+  useEffect(() => {
+    if (activeTab === 'campaigns' && screenDetails?.screenid) {
+      loadCampaigns(screenDetails.screenid);
+    }
+  }, [activeTab, screenDetails?.screenid]);
 
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
 
@@ -668,65 +768,57 @@ export default function Screens() {
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Email</label>
-                        <input
-                          type="email"
-                          value={screenDetails?.screenemail || ''}
-                          onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenemail: e.target.value} : null)}
-                          className={inputClasses}
-                        />
+                      {/* Action Buttons */}
+                      <div className="flex gap-4 mt-8">
+                        <button
+                          onClick={handleUpdateScreen}
+                          className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        >
+                          Update Screen
+                        </button>
+                        <button
+                          onClick={handleRetireScreen}
+                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        >
+                          Retire Screen
+                        </button>
                       </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Unique ID</label>
-                        <input
-                          type="text"
-                          value={screenDetails?.screenuniqueid || ''}
-                          onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenuniqueid: e.target.value} : null)}
-                          className={inputClasses}
-                        />
-                      </div>
-
-                      </div>
+                    </div>
                     )}
 
                     {activeTab === 'campaigns' && (
-                      <div className="p-6">
-                        <div className="flex justify-between items-center mb-6">
-                          <h2 className="text-lg font-medium text-gray-900">Screen Campaigns</h2>
-                          <button 
-                            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
-                          >
-                            <FiPlus className="w-4 h-4" />
-                            Add Campaign
-                          </button>
-                        </div>
-
-                        <div className="space-y-4">
-                          <p className="text-gray-500 text-center">No campaigns found</p>
-                        </div>
+                      <div className="p-6 space-y-6">
+                        {campaigns.length > 0 ? (
+                          campaigns.map((campaign) => (
+                            <div
+                              key={campaign.campaignid}
+                              className="flex items-center justify-between p-4 bg-white border rounded-lg"
+                            >
+                              <div className="flex-1">
+                                <h3 className="font-medium text-gray-900">{campaign.campaignname}</h3>
+                                <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
+                                  <span>Duration: {campaign.duration ? `${campaign.duration}s` : '0'}</span>
+                                  <span className="h-1 w-1 rounded-full bg-gray-300"></span>
+                                  <span>{campaign.playstate ? 'Playing' : 'Paused'}</span>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-500">
+                                  {new Date(campaign.startdate).toLocaleDateString()} - {new Date(campaign.enddate).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleDeleteCampaign(campaign.campaignid)}
+                                className="p-2 text-blue-600 hover:text-blue-700"
+                              >
+                                <FiTrash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-center text-gray-500">No campaigns assigned to this screen</p>
+                        )}
                       </div>
                     )}
                   </div>
-
-                  {/* Footer */}
-                  {activeTab === 'configuration' && (
-                    <div className="flex-shrink-0 px-4 py-4 flex justify-between bg-gray-50">
-                      <button
-                        onClick={handleRetireScreen}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                      >
-                        Retire Screen
-                      </button>
-                      <button
-                        onClick={handleUpdateScreen}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
-                        Update Screen
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
