@@ -745,139 +745,146 @@ export default function Screens(): React.ReactElement {
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 overflow-y-auto relative z-20">
+                  <div className="flex-1 overflow-y-auto relative z-20 pb-24">
                     {activeTab === 'configuration' && (
                       <div className="p-6 space-y-6 bg-white">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Screen Name</label>
-                        <input
-                          ref={screenNameInputRef}
-                          type="text"
-                          value={screenDetails?.screenname || ''}
-                          onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenname: e.target.value} : null)}
-                          className={inputClasses}
-                          autoFocus
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Screen Name</label>
+                          <input
+                            ref={screenNameInputRef}
+                            type="text"
+                            value={screenDetails?.screenname || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenname: e.target.value} : null)}
+                            className={inputClasses}
+                            autoFocus
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Screen Location</label>
-                        <textarea
-                          value={screenDetails?.screenlocation || ''}
-                          onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenlocation: e.target.value} : null)}
-                          className={inputClasses}
-                          rows={3}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Screen Location</label>
+                          <textarea
+                            value={screenDetails?.screenlocation || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenlocation: e.target.value} : null)}
+                            className={inputClasses}
+                            rows={3}
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Tags</label>
-                        <Select
-                          isMulti
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 })
-                          }}
-                          value={tags
-                            .filter(tag => {
-                              const isIncluded = screenDetails?.tags?.includes(tag.tagid);
-                              console.log(`Tag ${tag.tagname} (${tag.tagid}) included:`, isIncluded);
-                              return isIncluded;
-                            })
-                            .map(tag => ({
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Tags</label>
+                          <Select
+                            isMulti
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: base => ({ ...base, zIndex: 9999 })
+                            }}
+                            value={tags
+                              .filter(tag => {
+                                const isIncluded = screenDetails?.tags?.includes(tag.tagid);
+                                console.log(`Tag ${tag.tagname} (${tag.tagid}) included:`, isIncluded);
+                                return isIncluded;
+                              })
+                              .map(tag => ({
+                                value: tag.tagid,
+                                label: tag.tagname
+                              }))}
+                            onChange={(selectedOptions) => {
+                              const selectedTagIds = selectedOptions.map(option => option.value);
+                              setScreenDetails(prev => prev ? { ...prev, tags: selectedTagIds } : null);
+                            }}
+                            options={tags.map(tag => ({
                               value: tag.tagid,
                               label: tag.tagname
                             }))}
-                          onChange={(selectedOptions) => {
-                            const selectedTagIds = selectedOptions.map(option => option.value);
-                            setScreenDetails(prev => prev ? { ...prev, tags: selectedTagIds } : null);
-                          }}
-                          options={tags.map(tag => ({
-                            value: tag.tagid,
-                            label: tag.tagname
-                          }))}
-                          className="mt-1"
-                          classNames={{
-                            control: (state) => 
-                              `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
-                            input: () => "!text-sm",
-                            option: () => "!text-sm",
-                            placeholder: () => "!text-sm !text-slate-400",
-                            singleValue: () => "!text-sm"
-                          }}
-                        />
-                      </div>
+                            className="mt-1"
+                            classNames={{
+                              control: (state) => 
+                                `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                              input: () => "!text-sm",
+                              option: () => "!text-sm",
+                              placeholder: () => "!text-sm !text-slate-400",
+                              singleValue: () => "!text-sm"
+                            }}
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Update Frequency</label>
-                        <input
-                          type="text"
-                          value={screenDetails?.updatefrequency || ''}
-                          onChange={(e) => setScreenDetails(prev => prev ? {...prev, updatefrequency: e.target.value} : null)}
-                          className={inputClasses}
-                          placeholder="00:00:00"
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Update Frequency</label>
+                          <input
+                            type="text"
+                            value={screenDetails?.updatefrequency || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, updatefrequency: e.target.value} : null)}
+                            className={inputClasses}
+                            placeholder="00:00:00"
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Start Time</label>
-                        <Select
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 })
-                          }}
-                          value={timeOptions.find(option => option.value === screenDetails?.starttime)}
-                          onChange={(option) => setScreenDetails(prev => prev ? {...prev, starttime: option?.value || ''} : null)}
-                          options={timeOptions}
-                          className="mt-1"
-                          classNames={{
-                            control: (state) => 
-                              `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
-                            input: () => "!text-sm",
-                            option: () => "!text-sm",
-                            placeholder: () => "!text-sm !text-slate-400",
-                            singleValue: () => "!text-sm"
-                          }}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Start Time</label>
+                          <Select
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: base => ({ ...base, zIndex: 9999 })
+                            }}
+                            value={timeOptions.find(option => option.value === screenDetails?.starttime)}
+                            onChange={(option) => setScreenDetails(prev => prev ? {...prev, starttime: option?.value || ''} : null)}
+                            options={timeOptions}
+                            className="mt-1"
+                            classNames={{
+                              control: (state) => 
+                                `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                              input: () => "!text-sm",
+                              option: () => "!text-sm",
+                              placeholder: () => "!text-sm !text-slate-400",
+                              singleValue: () => "!text-sm"
+                            }}
+                          />
+                        </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">End Time</label>
-                        <Select
-                          menuPortalTarget={document.body}
-                          styles={{
-                            menuPortal: base => ({ ...base, zIndex: 9999 })
-                          }}
-                          value={timeOptions.find(option => option.value === screenDetails?.endtime)}
-                          onChange={(option) => setScreenDetails(prev => prev ? {...prev, endtime: option?.value || ''} : null)}
-                          options={timeOptions}
-                          className="mt-1"
-                          classNames={{
-                            control: (state) => 
-                              `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
-                            input: () => "!text-sm",
-                            option: () => "!text-sm",
-                            placeholder: () => "!text-sm !text-slate-400",
-                            singleValue: () => "!text-sm"
-                          }}
-                        />
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">End Time</label>
+                          <Select
+                            menuPortalTarget={document.body}
+                            styles={{
+                              menuPortal: base => ({ ...base, zIndex: 9999 })
+                            }}
+                            value={timeOptions.find(option => option.value === screenDetails?.endtime)}
+                            onChange={(option) => setScreenDetails(prev => prev ? {...prev, endtime: option?.value || ''} : null)}
+                            options={timeOptions}
+                            className="mt-1"
+                            classNames={{
+                              control: (state) => 
+                                `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                              input: () => "!text-sm",
+                              option: () => "!text-sm",
+                              placeholder: () => "!text-sm !text-slate-400",
+                              singleValue: () => "!text-sm"
+                            }}
+                          />
+                        </div>
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-4 mt-8">
-                        <button
-                          onClick={handleUpdateScreen}
-                          className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                        >
-                          Update Screen
-                        </button>
-                        <button
-                          onClick={handleRetireScreen}
-                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                        >
-                          Retire Screen
-                        </button>
-                      </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Email</label>
+                          <input
+                            type="email"
+                            value={screenDetails?.screenemail || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenemail: e.target.value} : null)}
+                            className={inputClasses}
+                            placeholder="Enter email address"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Unique ID</label>
+                          <input
+                            type="text"
+                            value={screenDetails?.screenuniqueid || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, screenuniqueid: e.target.value} : null)}
+                            className={inputClasses}
+                            placeholder="Enter unique ID"
+                          />
+                        </div>
+
                     </div>
                     )}
 
@@ -934,6 +941,26 @@ export default function Screens(): React.ReactElement {
                       </div>
                     )}
                   </div>
+
+                  {/* Fixed Action Buttons */}
+                  {activeTab === 'configuration' && (
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-30">
+                      <div className="flex gap-4">
+                        <button
+                          onClick={handleUpdateScreen}
+                          className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        >
+                          Update Screen
+                        </button>
+                        <button
+                          onClick={handleRetireScreen}
+                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        >
+                          Retire Screen
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
