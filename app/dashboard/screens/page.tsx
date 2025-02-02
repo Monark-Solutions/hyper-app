@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiTrash2, FiPlus } from 'react-icons/fi';
+import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiTrash2, FiSend } from 'react-icons/fi';
 import Select from 'react-select';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
@@ -37,6 +37,84 @@ interface Campaign {
   duration: number;
 }
 
+type CampaignWithState = Campaign & { 
+  state: 'Active' | 'Scheduled' | 'Completed';
+  progress: number;
+  timeText: string;
+};
+
+const formatTimeAgo = (date: Date, isEndDate: boolean = false) => {
+  const now = new Date();
+  const diffTime = Math.abs(date.getTime() - now.getTime());
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffWeeks > 0) {
+    return `${diffWeeks} week${diffWeeks > 1 ? 's' : ''}`;
+  }
+  return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+};
+
+const isSameDay = (date1: Date, date2: Date) => {
+  return date1.getFullYear() === date2.getFullYear() &&
+         date1.getMonth() === date2.getMonth() &&
+         date1.getDate() === date2.getDate();
+};
+
+const processedCampaigns = (campaigns: Campaign[]): CampaignWithState[] => {
+  const currentDate = new Date();
+  const currentDateStr = currentDate.toISOString().split('T')[0];
+
+  return campaigns.map(campaign => {
+    const startDate = new Date(campaign.startdate);
+    const endDate = new Date(campaign.enddate);
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    
+    let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
+    let progress = 0;
+    let timeText = '';
+
+    // Determine state and progress
+    if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
+      state = 'Active';
+      const totalDuration = endDate.getTime() - startDate.getTime();
+      const elapsed = currentDate.getTime() - startDate.getTime();
+      progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
+
+      if (isSameDay(currentDate, startDate)) {
+        timeText = 'Started Today';
+      } else {
+        timeText = `Started ${formatTimeAgo(startDate)} ago`;
+      }
+
+      if (isSameDay(currentDate, endDate)) {
+        timeText = 'Will End Today';
+      }
+    } else if (currentDateStr < startDateStr) {
+      state = 'Scheduled';
+      progress = 0;
+
+      if (isSameDay(currentDate, startDate)) {
+        timeText = 'Starts Today';
+      } else {
+        timeText = `Starts in ${formatTimeAgo(startDate)}`;
+      }
+    } else if (currentDateStr > endDateStr) {
+      state = 'Completed';
+      progress = 100;
+
+      if (isSameDay(currentDate, endDate)) {
+        timeText = 'Ended Today';
+      } else {
+        timeText = `Ended ${formatTimeAgo(endDate)} ago`;
+      }
+    }
+
+    return { ...campaign, state, progress, timeText };
+  });
+};
+
 interface Screen {
   id: number;
   screenid: string;
@@ -61,7 +139,7 @@ export default function Screens(): React.ReactElement {
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'configuration' | 'campaigns'>('configuration');
   const [screenDetails, setScreenDetails] = useState<ScreenDetails | null>(null);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
   const screenNameInputRef = useRef<HTMLInputElement>(null);
   const didFetch = useRef(false);
 
@@ -123,7 +201,7 @@ export default function Screens(): React.ReactElement {
   };
 
   // Function to fetch screens data
-  const fetchScreens = async () => {
+  const fetchScreens = async (updateSelected: boolean = false) => {
     const userDetailsStr = localStorage.getItem('userDetails');
     if (!userDetailsStr) {
       router.push('/');
@@ -131,6 +209,23 @@ export default function Screens(): React.ReactElement {
     }
 
     try {
+      // If updateSelected is true, update the updateguid for selected screens
+      if (updateSelected && selectedScreens.length > 0) {
+        const { error: updateError } = await supabase
+          .from('screens')
+          .update({ updateguid: generateGuid() })
+          .in('id', selectedScreens);
+
+        if (updateError) {
+          console.error('Error updating screens:', updateError);
+          Swal.fire('Error', 'Failed to update selected screens', 'error');
+          return;
+        }
+
+        // Clear selected screens after successful update
+        setSelectedScreens([]);
+      }
+
       const userDetails = JSON.parse(userDetailsStr);
       if (!userDetails?.customerId) {
         router.push('/');
@@ -195,8 +290,8 @@ export default function Screens(): React.ReactElement {
       }
 
       const campaignsList = data?.map(item => item.campaigns) || [];
-
-      setCampaigns(campaignsList);
+      const processedList = processedCampaigns(campaignsList);
+      setCampaigns(processedList);
     } catch (error) {
       console.error('Error loading campaigns:', error);
     }
@@ -409,10 +504,10 @@ export default function Screens(): React.ReactElement {
               <FiCheckSquare className="w-5 h-5" />
             </button>
             <button 
-              onClick={fetchScreens}
+              onClick={() => fetchScreens(true)}
               className="p-2 text-gray-600 hover:text-gray-800"
             >
-              <FiRefreshCw className="w-5 h-5" />
+              <FiSend className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -797,17 +892,37 @@ export default function Screens(): React.ReactElement {
                               <div className="flex-1">
                                 <h3 className="font-medium text-gray-900">{campaign.campaignname}</h3>
                                 <div className="mt-1 flex items-center gap-2 text-sm text-gray-500">
-                                  <span>Duration: {campaign.duration ? `${campaign.duration}s` : '0'}</span>
+                                  <span>Duration: {campaign.duration ? `${campaign.duration}s` : 'Play to end'}</span>
                                   <span className="h-1 w-1 rounded-full bg-gray-300"></span>
-                                  <span>{campaign.playstate ? 'Playing' : 'Paused'}</span>
+                                  <span>{campaign.state}</span>
+                                  <span className="h-1 w-1 rounded-full bg-gray-300"></span>
+                                  <span>{campaign.timeText}</span>
                                 </div>
-                                <div className="mt-2 text-xs text-gray-500">
-                                  {new Date(campaign.startdate).toLocaleDateString()} - {new Date(campaign.enddate).toLocaleDateString()}
+                                <div className="mt-2">
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className={`h-2 rounded-full ${
+                                        campaign.state === 'Completed' 
+                                          ? 'bg-green-600' 
+                                          : campaign.state === 'Active' 
+                                            ? 'bg-blue-600' 
+                                            : 'bg-gray-400'
+                                      }`} 
+                                      style={{ width: `${campaign.progress}%` }}
+                                    ></div>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {campaign.state === 'Completed' 
+                                      ? 'Campaign completed'
+                                      : campaign.state === 'Scheduled'
+                                        ? 'Not started'
+                                        : `${campaign.progress}% Completed`}
+                                  </p>
                                 </div>
                               </div>
                               <button
                                 onClick={() => handleDeleteCampaign(campaign.campaignid)}
-                                className="p-2 text-blue-600 hover:text-blue-700"
+                                className="p-2 text-gray-600 hover:text-gray-700"
                               >
                                 <FiTrash2 className="w-5 h-5" />
                               </button>
