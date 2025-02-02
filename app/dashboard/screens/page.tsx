@@ -29,6 +29,7 @@ export default function Screens() {
   const [searchInput, setSearchInput] = useState('');
   const [screens, setScreens] = useState<Screen[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedScreens, setSelectedScreens] = useState<number[]>([]);
 
   const filterScreens = useCallback((screen: Screen) => {
     // Filter by status
@@ -57,6 +58,17 @@ export default function Screens() {
     
     return true;
   }, [selectedStatus, searchTerms, tags]);
+
+  const toggleAllScreens = useCallback(() => {
+    const filteredScreens = screens.filter(filterScreens);
+    if (selectedScreens.length === filteredScreens.length) {
+      // If all filtered screens are selected, deselect all
+      setSelectedScreens([]);
+    } else {
+      // Otherwise, select all filtered screens
+      setSelectedScreens(filteredScreens.map(screen => screen.id));
+    }
+  }, [screens, filterScreens, selectedScreens]);
 
   const didFetch = useRef(false);
 
@@ -111,7 +123,10 @@ export default function Screens() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Screens</h1>
         <div className="flex gap-2">
-          <button className="p-2 text-gray-600 hover:text-gray-800">
+          <button 
+            onClick={toggleAllScreens}
+            className="p-2 text-gray-600 hover:text-gray-800"
+          >
             <FiCheckSquare className="w-5 h-5" />
           </button>
           <button className="p-2 text-gray-600 hover:text-gray-800">
@@ -214,6 +229,14 @@ export default function Screens() {
                 <h3 className="font-medium text-gray-900">{screen.screenname}</h3>
                 <input
                   type="checkbox"
+                  checked={selectedScreens.includes(screen.id)}
+                  onChange={() => {
+                    setSelectedScreens(prev => 
+                      prev.includes(screen.id)
+                        ? prev.filter(id => id !== screen.id)
+                        : [...prev, screen.id]
+                    );
+                  }}
                   className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                 />
               </div>

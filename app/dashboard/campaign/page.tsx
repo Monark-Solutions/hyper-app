@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Dialog } from '@headlessui/react';
 import CampaignForm from '@/components/CampaignForm';
 import { useRouter } from 'next/navigation';
@@ -133,6 +133,39 @@ export default function Campaign() {
     }
   };
 
+  const didFetch = useRef(false);
+
+  useEffect(() => {
+    if (didFetch.current) return;
+
+    const userDetailsStr = localStorage.getItem('userDetails');
+    if (!userDetailsStr) {
+      router.push('/');
+      return;
+    }
+
+    try {
+      const userDetails = JSON.parse(userDetailsStr);
+      if (!userDetails?.customerId) {
+        router.push('/');
+        return;
+      }
+
+      // Set flag before fetching to prevent duplicate calls
+      didFetch.current = true;
+
+      // Load campaigns
+      fetchCampaigns().catch(error => {
+        console.error('Error loading campaigns:', error);
+        router.push('/');
+      });
+    } catch (error) {
+      console.error('Error parsing user details:', error);
+      router.push('/');
+    }
+  }, []); // Empty dependency array since we're using didFetch ref
+
+  // Handle drawer close events
   useEffect(() => {
     const handleCloseDrawer = () => {
       setIsDrawerOpen(false);
@@ -142,15 +175,6 @@ export default function Campaign() {
     window.addEventListener('closeDrawer', handleCloseDrawer);
     return () => window.removeEventListener('closeDrawer', handleCloseDrawer);
   }, []);
-
-  useEffect(() => {
-    const userDetails = localStorage.getItem('userDetails');
-    if (!userDetails) {
-      router.push('/');
-    } else {
-      fetchCampaigns();
-    }
-  }, [router]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { useDropzone } from 'react-dropzone';
@@ -695,24 +695,51 @@ export default function Media() {
     return () => window.removeEventListener('closeDrawer', handleCloseCampaignDrawer);
   }, [selectedMediaItem]);
 
+  const filterMediaItems = useCallback((mediaType: 'all' | 'image' | 'video', terms: string[]) => {
+    const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+    const customerId = userDetails?.customerId;
+    if (!customerId) return;
+
+    setSelectedMediaType(mediaType);
+    setSearchTerms(terms);
+    setPage(1);
+    loadMediaItems(customerId, 1, false, mediaType, terms);
+  }, []);
+
+  const didFetch = useRef(false);
+
   useEffect(() => {
+    if (didFetch.current) return;
+
     const userDetailsStr = localStorage.getItem('userDetails');
     if (!userDetailsStr) {
       router.push('/');
-    } else {
-      try {
-        const userDetails = JSON.parse(userDetailsStr);
-        if (userDetails?.customerId) {
-          // Load existing tags and media
-          loadTags(userDetails.customerId);
-          loadMediaItems(userDetails.customerId, 1, false, selectedMediaType, searchTerms);
-        }
-      } catch (error) {
-        console.error('Error parsing user details:', error);
-        router.push('/');
-      }
+      return;
     }
-  }, [router, selectedMediaType, searchTerms]);
+
+    try {
+      const userDetails = JSON.parse(userDetailsStr);
+      if (!userDetails?.customerId) {
+        router.push('/');
+        return;
+      }
+
+      // Set flag before fetching to prevent duplicate calls
+      didFetch.current = true;
+
+      // Load data in parallel
+      Promise.all([
+        loadTags(userDetails.customerId),
+        loadMediaItems(userDetails.customerId, 1, false, 'all', [])
+      ]).catch(error => {
+        console.error('Error loading data:', error);
+        router.push('/');
+      });
+    } catch (error) {
+      console.error('Error parsing user details:', error);
+      router.push('/');
+    }
+  }, []); // Empty dependency array since we're using didFetch ref
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -735,35 +762,20 @@ export default function Media() {
       <div className="mb-6">
         <div className="flex space-x-4 mb-4">
           <button 
-            onClick={() => {
-              setSelectedMediaType('all');
-              const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-              loadMediaItems(userDetails?.customerId, 1, false, 'all', searchTerms);
-              setPage(1);
-            }}
+            onClick={() => filterMediaItems('all', searchTerms)}
             className={`${selectedMediaType === 'all' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-700'} text-sm`}
           >
             All Media
           </button>
           <button 
-            onClick={() => {
-              setSelectedMediaType('image');
-              const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-              loadMediaItems(userDetails?.customerId, 1, false, 'image', searchTerms);
-              setPage(1);
-            }}
+            onClick={() => filterMediaItems('image', searchTerms)}
             className={`${selectedMediaType === 'image' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-700'} text-sm flex items-center gap-1`}
           >
             <FiImage className="w-4 h-4" />
             Images
           </button>
           <button 
-            onClick={() => {
-              setSelectedMediaType('video');
-              const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-              loadMediaItems(userDetails?.customerId, 1, false, 'video', searchTerms);
-              setPage(1);
-            }}
+            onClick={() => filterMediaItems('video', searchTerms)}
             className={`${selectedMediaType === 'video' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-700'} text-sm flex items-center gap-1`}
           >
             <FiVideo className="w-4 h-4" />
@@ -783,10 +795,7 @@ export default function Media() {
                 <button
                   onClick={() => {
                     const newTerms = searchTerms.filter((_, i) => i !== index);
-                    setSearchTerms(newTerms);
-                    const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-                    loadMediaItems(userDetails?.customerId, 1, false, selectedMediaType, newTerms);
-                    setPage(1);
+                    filterMediaItems(selectedMediaType, newTerms);
                   }}
                   className="ml-1.5 h-4 w-4 flex items-center justify-center"
                 >
@@ -801,11 +810,8 @@ export default function Media() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && searchInput.trim()) {
                   const newTerms = [...searchTerms, searchInput.trim()];
-                  setSearchTerms(newTerms);
                   setSearchInput('');
-                  const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-                  loadMediaItems(userDetails?.customerId, 1, false, selectedMediaType, newTerms);
-                  setPage(1);
+                  filterMediaItems(selectedMediaType, newTerms);
                 }
               }}
               placeholder={searchTerms.length === 0 ? "Search media..." : ""}
@@ -816,11 +822,8 @@ export default function Media() {
             onClick={() => {
               if (searchInput.trim()) {
                 const newTerms = [...searchTerms, searchInput.trim()];
-                setSearchTerms(newTerms);
                 setSearchInput('');
-                const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-                loadMediaItems(userDetails?.customerId, 1, false, selectedMediaType, newTerms);
-                setPage(1);
+                filterMediaItems(selectedMediaType, newTerms);
               }
             }}
             className="ml-2 p-2 text-gray-400 hover:text-gray-600"
@@ -830,11 +833,8 @@ export default function Media() {
           {searchTerms.length > 0 && (
             <button
               onClick={() => {
-                setSearchTerms([]);
                 setSearchInput('');
-                const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
-                loadMediaItems(userDetails?.customerId, 1, false, selectedMediaType, []);
-                setPage(1);
+                filterMediaItems(selectedMediaType, []);
               }}
               className="ml-2 p-2 text-gray-400 hover:text-gray-600"
             >
