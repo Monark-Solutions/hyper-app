@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { FiSearch, FiX, FiCheckSquare, FiRefreshCw } from 'react-icons/fi';
+import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiPlus } from 'react-icons/fi';
 import Select from 'react-select';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
@@ -16,6 +16,8 @@ interface ScreenDetails {
   endtime: string;
   screenemail: string;
   screenuniqueid: string;
+  tags?: number[];
+  id?: number;
 }
 
 interface Tag {
@@ -45,6 +47,7 @@ export default function Screens() {
   const [selectedScreens, setSelectedScreens] = useState<number[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedScreenId, setSelectedScreenId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'configuration' | 'campaigns'>('configuration');
   const [screenDetails, setScreenDetails] = useState<ScreenDetails | null>(null);
   const screenNameInputRef = useRef<HTMLInputElement>(null);
   const didFetch = useRef(false);
@@ -97,24 +100,6 @@ export default function Screens() {
     }
   }, [screens, filterScreens, selectedScreens]);
 
-  const handleScreenClick = async (screenId: string) => {
-    setSelectedScreenId(screenId);
-    
-    const { data, error } = await supabase
-      .from('screens')
-      .select('*')
-      .eq('screenid', screenId)
-      .single();
-    
-    if (error) {
-      console.error('Error fetching screen details:', error);
-      return;
-    }
-
-    setScreenDetails(data);
-    setIsDrawerOpen(true);
-  };
-
   // Helper function to generate a GUID
   const generateGuid = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -166,10 +151,54 @@ export default function Screens() {
     }
   };
 
+  const handleScreenClick = async (screenId: string) => {
+    setSelectedScreenId(screenId);
+    
+    try {
+      // First get the screen details to get the id
+      const { data: screenData, error: screenError } = await supabase
+        .from('screens')
+        .select('*')
+        .eq('screenid', screenId)
+        .single();
+    
+      if (screenError) {
+        console.error('Error fetching screen details:', screenError);
+        return;
+      }
+
+      // Then get the tags using the numeric id
+      const { data: tagData, error: tagError } = await supabase
+        .from('screentags')
+        .select('tagid')
+        .eq('screenid', screenData.id);
+
+      if (tagError) {
+        console.error('Error fetching screen tags:', tagError);
+        return;
+      }
+
+      const screenDetailsWithTags = {
+        ...screenData,
+        tags: tagData.map(t => t.tagid)
+      };
+      console.log('Setting screen details with tags:', screenDetailsWithTags);
+      console.log('Available tags:', tags);
+      
+      setScreenDetails(screenDetailsWithTags);
+      setIsDrawerOpen(true);
+    } catch (error) {
+      console.error('Error loading screen data:', error);
+      Swal.fire('Error', 'Failed to load screen details', 'error');
+      return;
+    }
+  };
+
   const handleUpdateScreen = async () => {
     if (!screenDetails || !selectedScreenId) return;
 
-    const { error } = await supabase
+    // First update the screen details
+    const { error: screenUpdateError } = await supabase
       .from('screens')
       .update({
         screenname: screenDetails.screenname,
@@ -183,10 +212,40 @@ export default function Screens() {
       })
       .eq('screenid', selectedScreenId);
 
-    if (error) {
-      console.error('Error updating screen:', error);
+    if (screenUpdateError) {
+      console.error('Error updating screen:', screenUpdateError);
       Swal.fire('Error', 'Failed to update screen', 'error');
       return;
+    }
+
+    // Delete existing tag associations using numeric id
+    const { error: deleteTagsError } = await supabase
+      .from('screentags')
+      .delete()
+      .eq('screenid', screenDetails.id);
+
+    if (deleteTagsError) {
+      console.error('Error deleting existing tags:', deleteTagsError);
+      Swal.fire('Error', 'Failed to update screen tags', 'error');
+      return;
+    }
+
+    // Add new tag associations if there are any tags selected
+    if (screenDetails.tags && screenDetails.tags.length > 0) {
+      const tagAssociations = screenDetails.tags.map(tagId => ({
+        screenid: screenDetails.id,
+        tagid: tagId
+      }));
+
+      const { error: addTagsError } = await supabase
+        .from('screentags')
+        .insert(tagAssociations);
+
+      if (addTagsError) {
+        console.error('Error adding new tags:', addTagsError);
+        Swal.fire('Error', 'Failed to update screen tags', 'error');
+        return;
+      }
     }
 
     setIsDrawerOpen(false);
@@ -454,19 +513,46 @@ export default function Screens() {
               <div className="relative w-screen max-w-md">
                 <div className="h-full flex flex-col bg-white shadow-xl">
                   {/* Header */}
-                  <div className="p-4 bg-white border-b flex justify-between items-center">
-                    <h2 className="text-xl font-semibold">{screenDetails?.screenname}</h2>
+                  <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white relative z-10">
+                    <h2 className="text-lg font-medium text-gray-900">{screenDetails?.screenname}</h2>
                     <button
                       onClick={() => setIsDrawerOpen(false)}
-                      className="p-2 hover:bg-gray-100 rounded-full"
+                      className="h-7 flex items-center"
                     >
-                      <FiX className="w-5 h-5" />
+                      <FiX className="w-6 h-6 text-gray-400" />
                     </button>
                   </div>
 
+                  {/* Tabs */}
+                  <div className="border-b border-gray-200">
+                    <nav className="flex -mb-px">
+                      <button
+                        onClick={() => setActiveTab('configuration')}
+                        className={`${
+                          activeTab === 'configuration'
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        } flex-1 py-4 px-1 text-center border-b-2 font-medium text-sm`}
+                      >
+                        Configuration
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('campaigns')}
+                        className={`${
+                          activeTab === 'campaigns'
+                            ? 'border-blue-500 text-blue-600'
+                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        } flex-1 py-4 px-1 text-center border-b-2 font-medium text-sm`}
+                      >
+                        Campaigns
+                      </button>
+                    </nav>
+                  </div>
+
                   {/* Content */}
-                  <div className="flex-1 overflow-y-auto p-6">
-                    <div className="space-y-6">
+                  <div className="flex-1 overflow-y-auto relative z-20">
+                    {activeTab === 'configuration' && (
+                      <div className="p-6 space-y-6 bg-white">
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Screen Name</label>
                         <input
@@ -490,6 +576,44 @@ export default function Screens() {
                       </div>
 
                       <div>
+                        <label className="block text-sm font-medium text-gray-700">Tags</label>
+                        <Select
+                          isMulti
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: base => ({ ...base, zIndex: 9999 })
+                          }}
+                          value={tags
+                            .filter(tag => {
+                              const isIncluded = screenDetails?.tags?.includes(tag.tagid);
+                              console.log(`Tag ${tag.tagname} (${tag.tagid}) included:`, isIncluded);
+                              return isIncluded;
+                            })
+                            .map(tag => ({
+                              value: tag.tagid,
+                              label: tag.tagname
+                            }))}
+                          onChange={(selectedOptions) => {
+                            const selectedTagIds = selectedOptions.map(option => option.value);
+                            setScreenDetails(prev => prev ? { ...prev, tags: selectedTagIds } : null);
+                          }}
+                          options={tags.map(tag => ({
+                            value: tag.tagid,
+                            label: tag.tagname
+                          }))}
+                          className="mt-1"
+                          classNames={{
+                            control: (state) => 
+                              `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                            input: () => "!text-sm",
+                            option: () => "!text-sm",
+                            placeholder: () => "!text-sm !text-slate-400",
+                            singleValue: () => "!text-sm"
+                          }}
+                        />
+                      </div>
+
+                      <div>
                         <label className="block text-sm font-medium text-gray-700">Update Frequency</label>
                         <input
                           type="text"
@@ -503,6 +627,10 @@ export default function Screens() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Start Time</label>
                         <Select
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: base => ({ ...base, zIndex: 9999 })
+                          }}
                           value={timeOptions.find(option => option.value === screenDetails?.starttime)}
                           onChange={(option) => setScreenDetails(prev => prev ? {...prev, starttime: option?.value || ''} : null)}
                           options={timeOptions}
@@ -521,6 +649,10 @@ export default function Screens() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700">End Time</label>
                         <Select
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: base => ({ ...base, zIndex: 9999 })
+                          }}
                           value={timeOptions.find(option => option.value === screenDetails?.endtime)}
                           onChange={(option) => setScreenDetails(prev => prev ? {...prev, endtime: option?.value || ''} : null)}
                           options={timeOptions}
@@ -556,22 +688,45 @@ export default function Screens() {
                         />
                       </div>
 
-                      <div className="flex gap-4 pt-4">
-                        <button
-                          onClick={handleRetireScreen}
-                          className="flex-1 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        >
-                          Retire Screen
-                        </button>
-                        <button
-                          onClick={handleUpdateScreen}
-                          className="flex-1 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                          Update Screen
-                        </button>
                       </div>
-                    </div>
+                    )}
+
+                    {activeTab === 'campaigns' && (
+                      <div className="p-6">
+                        <div className="flex justify-between items-center mb-6">
+                          <h2 className="text-lg font-medium text-gray-900">Screen Campaigns</h2>
+                          <button 
+                            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+                          >
+                            <FiPlus className="w-4 h-4" />
+                            Add Campaign
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          <p className="text-gray-500 text-center">No campaigns found</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Footer */}
+                  {activeTab === 'configuration' && (
+                    <div className="flex-shrink-0 px-4 py-4 flex justify-between bg-gray-50">
+                      <button
+                        onClick={handleRetireScreen}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Retire Screen
+                      </button>
+                      <button
+                        onClick={handleUpdateScreen}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        Update Screen
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
