@@ -615,7 +615,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const currentScreens = filteredScreens.slice(indexOfFirstScreen, indexOfLastScreen);
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full p-4 md:p-6">
       <form id="campaign-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Hidden delete button for parent component to trigger */}
         <button
@@ -625,8 +625,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           className="hidden"
         />
 
-        {/* Campaign Name and Media File in a grid */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Campaign Name and Media File */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Campaign Name</label>
             <input
@@ -668,7 +668,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
         {/* Playback Duration for Image Files */}
         {media.find(item => item.mediaid === formData.mediaId)?.medianame?.toLowerCase().match(/\.(jpg|jpeg|png|gif|bmp)$/) && (
-          <div>
+          <div className="max-w-md">
             <label className="block text-sm font-medium text-gray-700">Playback Duration (in sec.)</label>
             <input
               type="number"
@@ -682,7 +682,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         )}
 
         {/* Date Range */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700">Start Date</label>
             <input
@@ -706,10 +706,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         </div>
 
         {/* Screens Section */}
-        <div className="grid grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
           {/* Left Column: Screen Selection */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
+          <div className="order-2 lg:order-1">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-2">
               <h2 className="text-lg font-medium text-gray-900">Select Screens</h2>
               <div className="flex items-center gap-2">
                 <button
@@ -720,7 +720,6 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                     setShowFilteredOnly(true);
                     setShowAllLink(true);
                     
-                    // Update marker visibility
                     Object.entries(markers.current).forEach(([screenId, marker]) => {
                       const isVisible = selectedOnlyScreens.some(s => s.screenid === screenId);
                       marker.getElement().style.display = isVisible ? 'block' : 'none';
@@ -738,7 +737,6 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                       setShowAllLink(false);
                       setFilteredScreens(screens);
                       
-                      // Show all markers
                       Object.values(markers.current).forEach(marker => {
                         marker.getElement().style.display = 'block';
                       });
@@ -808,11 +806,11 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
             {/* Screens Table */}
             <div className="border rounded-lg overflow-hidden">
-              <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 table-fixed md:table-auto">
+              <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="w-[50px] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-[40px] px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         <input
                           type="checkbox"
                           checked={selectedScreens.size === filteredScreens.length}
@@ -820,21 +818,21 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                           className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
                       </th>
-                      <th className="w-[25%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-[30%] px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Screen Name
                       </th>
-                      <th className="w-[30%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-[35%] px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                         Location
                       </th>
-                      <th className="w-[45%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="w-[35%] px-2 md:px-6 py-2 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Tags
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {currentScreens.map((screen) => (
-                      <tr key={screen.screenid}>
-                        <td className="px-3 md:px-6 py-4">
+                      <tr key={screen.screenid} className="hover:bg-gray-50">
+                        <td className="px-2 md:px-6 py-2 md:py-4">
                           <input
                             type="checkbox"
                             checked={selectedScreens.has(screen.screenid)}
@@ -842,9 +840,14 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                             className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                           />
                         </td>
-                        <td className="px-3 md:px-6 py-4 truncate" title={screen.screenname}>{screen.screenname}</td>
-                        <td className="px-3 md:px-6 py-4 truncate" title={screen.screenlocation}>{screen.screenlocation}</td>
-                        <td className="px-3 md:px-6 py-4">
+                        <td className="px-2 md:px-6 py-2 md:py-4">
+                          <div className="text-sm truncate" title={screen.screenname}>{screen.screenname}</div>
+                          <div className="text-xs text-gray-500 truncate md:hidden" title={screen.screenlocation}>{screen.screenlocation}</div>
+                        </td>
+                        <td className="px-2 md:px-6 py-2 md:py-4 truncate hidden md:table-cell" title={screen.screenlocation}>
+                          <span className="text-sm">{screen.screenlocation}</span>
+                        </td>
+                        <td className="px-2 md:px-6 py-2 md:py-4">
                           <div className="flex flex-wrap gap-1">
                             {screen.tags.map((tag) => (
                               <span
@@ -866,7 +869,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           </div>
 
           {/* Right Column: Map */}
-          <div className="h-[600px] bg-gray-100 rounded-lg overflow-hidden">
+          <div className="order-1 lg:order-2 h-[300px] md:h-[400px] lg:h-[600px] bg-gray-100 rounded-lg overflow-hidden">
             <div ref={mapContainer} className="w-full h-full" />
           </div>
         </div>
