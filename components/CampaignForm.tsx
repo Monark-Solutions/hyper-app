@@ -332,6 +332,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         Swal.fire('Error', 'Please enter a valid playback duration for image files', 'error');
         return;
       }
+      else if(!isImageFile){
+        // empty formData.duration for video file
+        formData.duration = 0;
+      }
 
       // Validate date range
       const startDate = new Date(formData.startDate);
@@ -550,7 +554,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.startDate}
               onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-              min={today}
+              // min={today}
               className={inputClasses}
               required
             />
@@ -561,7 +565,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.endDate}
               onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-              min={formData.startDate || today}
+              // min={formData.startDate || today}
               className={inputClasses}
               required
             />

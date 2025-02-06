@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiTrash2, FiSend } from 'react-icons/fi';
+import { ActionMeta, MultiValue, GroupBase } from 'react-select';
+import CreatableSelect from 'react-select/creatable';
 import Select from 'react-select';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
@@ -772,38 +774,59 @@ export default function Screens(): React.ReactElement {
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700">Tags</label>
-                          <Select
+                          <CreatableSelect
                             isMulti
                             menuPortalTarget={document.body}
                             styles={{
                               menuPortal: base => ({ ...base, zIndex: 9999 })
                             }}
                             value={tags
-                              .filter(tag => {
-                                const isIncluded = screenDetails?.tags?.includes(tag.tagid);
-                                console.log(`Tag ${tag.tagname} (${tag.tagid}) included:`, isIncluded);
-                                return isIncluded;
-                              })
+                              .filter(tag => screenDetails?.tags?.includes(tag.tagid))
                               .map(tag => ({
                                 value: tag.tagid,
                                 label: tag.tagname
                               }))}
-                            onChange={(selectedOptions) => {
-                              const selectedTagIds = selectedOptions.map(option => option.value);
-                              setScreenDetails(prev => prev ? { ...prev, tags: selectedTagIds } : null);
-                            }}
                             options={tags.map(tag => ({
                               value: tag.tagid,
                               label: tag.tagname
                             }))}
-                            className="mt-1"
+                            onChange={(
+                              newValue: MultiValue<{ value: number; label: string }>,
+                              _actionMeta: ActionMeta<{ value: number; label: string }>
+                            ) => {
+                              const selectedTagIds = newValue.map(option => option.value);
+                              setScreenDetails(prev => prev ? { ...prev, tags: selectedTagIds } : null);
+                            }}
+                            onCreateOption={async (inputValue: string) => {
+                              const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+                              const customerId = userDetails?.customerId;
+                              if (!customerId) return;
+
+                              const { data, error } = await supabase
+                                .from('tags')
+                                .insert([{ customerid: customerId, tagname: inputValue }])
+                                .select();
+
+                              if (!error && data) {
+                                const newTag = data[0];
+                                setTags([...tags, newTag]);
+                                setScreenDetails(prev => prev ? { 
+                                  ...prev, 
+                                  tags: [...(prev.tags || []), newTag.tagid] 
+                                } : null);
+                              }
+                            }}
+                            isClearable
                             classNames={{
-                              control: (state) => 
-                                `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
-                              input: () => "!text-sm",
-                              option: () => "!text-sm",
-                              placeholder: () => "!text-sm !text-slate-400",
-                              singleValue: () => "!text-sm"
+                              control: () => 
+                                'px-3 py-1.5 border border-gray-300 rounded-md shadow-sm focus-within:ring-blue-500 focus-within:border-blue-500',
+                              menu: () => 'mt-1 bg-white border border-gray-300 rounded-md shadow-lg',
+                              option: ({ isFocused }) => 
+                                `px-3 py-2 ${isFocused ? 'bg-gray-100' : 'hover:bg-gray-50'}`,
+                              multiValue: () => 
+                                'bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-sm font-medium mr-1',
+                              multiValueRemove: () => 
+                                'ml-1 hover:text-blue-900 cursor-pointer'
                             }}
                           />
                         </div>
@@ -824,10 +847,12 @@ export default function Screens(): React.ReactElement {
                           <Select
                             menuPortalTarget={document.body}
                             styles={{
-                              menuPortal: base => ({ ...base, zIndex: 9999 })
+                              menuPortal: (base: any) => ({ ...base, zIndex: 9999 })
                             }}
                             value={timeOptions.find(option => option.value === screenDetails?.starttime)}
-                            onChange={(option) => setScreenDetails(prev => prev ? {...prev, starttime: option?.value || ''} : null)}
+                            onChange={(option: { value: string; label: string } | null) => 
+                              setScreenDetails(prev => prev ? {...prev, starttime: option?.value || ''} : null)
+                            }
                             options={timeOptions}
                             className="mt-1"
                             classNames={{
@@ -846,14 +871,16 @@ export default function Screens(): React.ReactElement {
                           <Select
                             menuPortalTarget={document.body}
                             styles={{
-                              menuPortal: base => ({ ...base, zIndex: 9999 })
+                              menuPortal: (base: any) => ({ ...base, zIndex: 9999 })
                             }}
                             value={timeOptions.find(option => option.value === screenDetails?.endtime)}
-                            onChange={(option) => setScreenDetails(prev => prev ? {...prev, endtime: option?.value || ''} : null)}
+                            onChange={(option: { value: string; label: string } | null) => 
+                              setScreenDetails(prev => prev ? {...prev, endtime: option?.value || ''} : null)
+                            }
                             options={timeOptions}
                             className="mt-1"
                             classNames={{
-                              control: (state) => 
+                              control: (state: any) => 
                                 `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
                               input: () => "!text-sm",
                               option: () => "!text-sm",

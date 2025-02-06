@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { ActionMeta, MultiValue } from 'react-select';
+import CreatableSelect from 'react-select/creatable';
+import { GroupBase } from 'react-select';
 import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { useDropzone } from 'react-dropzone';
@@ -1014,67 +1017,55 @@ export default function Media() {
                       {/* Tags Input */}
                       <div className="mb-6">
                         <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={propertyNewTag}
-                            onChange={(e) => {
-                              setPropertyNewTag(e.target.value);
-                              const filtered = tags.filter(tag => 
-                                tag.tagname.toLowerCase().includes(e.target.value.toLowerCase()) &&
-                                !selectedPropertyTags.some(st => st.tagid === tag.tagid)
-                              );
-                              setFilteredPropertyTags(filtered);
-                              setShowPropertyTagDropdown(true);
-                            }}
-                            onKeyDown={handlePropertyTagInput}
-                            onFocus={() => {
-                              const filtered = tags.filter(tag => 
-                                !selectedPropertyTags.some(st => st.tagid === tag.tagid)
-                              );
-                              setFilteredPropertyTags(filtered);
-                              setShowPropertyTagDropdown(true);
-                            }}
-                            onBlur={() => {
-                              setTimeout(() => setShowPropertyTagDropdown(false), 200);
-                            }}
-                            placeholder="Type tag and press Enter"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          />
-                          {showPropertyTagDropdown && filteredPropertyTags.length > 0 && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-auto">
-                              {filteredPropertyTags.map((tag, index) => (
-                                <div
-                                  key={`dropdown-${tag.tagid}-${index}`}
-                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                                  onClick={() => {
-                                    setSelectedPropertyTags([...selectedPropertyTags, tag]);
-                                    setPropertyNewTag('');
-                                    setShowPropertyTagDropdown(false);
-                                  }}
-                                >
-                                  {tag.tagname}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {selectedPropertyTags.map((tag, index) => (
-                            <span
-                              key={`${tag.tagid}-${index}`}
-                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                            >
-                              {tag.tagname}
-                              <button
-                                onClick={() => setSelectedPropertyTags(selectedPropertyTags.filter(t => t.tagid !== tag.tagid))}
-                                className="ml-1.5 h-4 w-4 flex items-center justify-center"
-                              >
-                                <FiX className="w-3 h-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
+                        <CreatableSelect
+                          isMulti
+                          value={selectedPropertyTags.map(tag => ({
+                            value: tag.tagid,
+                            label: tag.tagname
+                          }))}
+                          options={tags.map(tag => ({
+                            value: tag.tagid,
+                            label: tag.tagname
+                          }))}
+                          onChange={(
+                            newValue: MultiValue<{ value: number; label: string }>,
+                            _actionMeta: ActionMeta<{ value: number; label: string }>
+                          ) => {
+                            const selectedTags = newValue.map(option => ({
+                              tagid: option.value,
+                              tagname: option.label
+                            }));
+                            setSelectedPropertyTags(selectedTags);
+                          }}
+                          onCreateOption={async (inputValue: string) => {
+                            const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+                            const customerId = userDetails?.customerId;
+                            if (!customerId) return;
+
+                            const { data, error } = await supabase
+                              .from('tags')
+                              .insert([{ customerid: customerId, tagname: inputValue }])
+                              .select();
+
+                            if (!error && data) {
+                              const newTag = data[0];
+                              setTags([...tags, newTag]);
+                              setSelectedPropertyTags([...selectedPropertyTags, newTag]);
+                            }
+                          }}
+                          isClearable
+                          classNames={{
+                            control: () => 
+                              'px-3 py-1.5 border border-gray-300 rounded-md shadow-sm focus-within:ring-blue-500 focus-within:border-blue-500',
+                            menu: () => 'mt-1 bg-white border border-gray-300 rounded-md shadow-lg',
+                            option: ({ isFocused }) => 
+                              `px-3 py-2 ${isFocused ? 'bg-gray-100' : 'hover:bg-gray-50'}`,
+                            multiValue: () => 
+                              'bg-blue-100 text-blue-800 rounded-full px-2 py-0.5 text-sm font-medium mr-1',
+                            multiValueRemove: () => 
+                              'ml-1 hover:text-blue-900 cursor-pointer'
+                          }}
+                        />
                       </div>
                     </div>
                   )}

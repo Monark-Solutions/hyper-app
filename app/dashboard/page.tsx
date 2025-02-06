@@ -8,10 +8,12 @@ import {
   RiMovie2Line,
   RiEyeLine,
   RiArrowUpLine,
+  RiArrowDownLine,
   RiTimeLine,
   RiUploadCloud2Line,
   RiCheckboxCircleLine
 } from 'react-icons/ri';
+import supabase from '@/lib/supabase';
 
 type UserDetails = {
   name: string;
@@ -20,9 +22,34 @@ type UserDetails = {
   username: string;
 };
 
+type RecentActivity = {
+  activitytype: string;
+  recentactivity: string;
+  status: string;
+};
+
+type DashboardSummary = {
+  active_campaigns: number;
+  last_month_campaigns: number;
+  active_vs_last_month_percent: number;
+  campaign_trend: 'Up' | 'Down';
+  total_screens: number;
+  active_screens: number;
+  files_uploaded: number;
+  storage_used_kb: number;
+  storage_used_mb: number;
+  storage_used_gb: number;
+  total_views_current_month: number;
+  total_views_previous_month: number;
+  views_percentage_change: number;
+  views_trend: 'Up' | 'Down';
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
 
   useEffect(() => {
     const storedDetails = localStorage.getItem('userDetails');
@@ -33,7 +60,54 @@ export default function Dashboard() {
     setUserDetails(JSON.parse(storedDetails));
   }, [router]);
 
-  if (!userDetails) return null;
+  useEffect(() => {
+    if (userDetails?.customerId) {
+      const fetchDashboardData = async () => {
+        try {
+          const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          //console.log('Fetching data for customer:', userDetails.customerId);
+          const { data, error } = await supabase
+            .rpc('get_dashboard_summary', {
+              customerid: userDetails.customerId,
+              time_zone: timeZone
+            });
+          
+          if (error) {
+            console.error('Supabase RPC Error:', error.message, error.details, error.hint);
+            return;
+          }
+          
+          if (!data) {
+            console.error('No data returned from RPC call');
+            return;
+          }
+
+          setDashboardData(data);
+
+          // Fetch recent activities
+          const { data: activityData, error: activityError } = await supabase
+            .rpc('get_recent_activity', {
+              customerid_param: userDetails.customerId
+            });
+
+          if (activityError) {
+            console.error('Recent Activity Error:', activityError);
+            return;
+          }
+
+          if (activityData) {
+            setRecentActivities(activityData);
+          }
+        } catch (err) {
+          console.error('Error in fetchDashboardData:', err);
+        }
+      };
+
+      fetchDashboardData();
+    }
+  }, [userDetails]);
+
+  if (!userDetails || !dashboardData) return null;
 
   return (
     <div className="space-y-6">
@@ -56,10 +130,14 @@ export default function Dashboard() {
               <RiMegaphoneLine className="w-6 h-6 text-blue-600" />
             </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold text-gray-900">3</p>
+          <p className="mt-4 text-3xl font-semibold text-gray-900">{dashboardData.active_campaigns}</p>
           <div className="mt-2 flex items-center text-sm text-green-600">
-            <RiArrowUpLine className="w-4 h-4 mr-1" />
-            <span>12% from last month</span>
+            {dashboardData.campaign_trend === 'Up' ? (
+              <RiArrowUpLine className="w-4 h-4 mr-1 text-green-600" />
+            ) : (
+              <RiArrowDownLine className="w-4 h-4 mr-1 text-red-600" />
+            )}
+            <span>{dashboardData.active_vs_last_month_percent}% from last month</span>
           </div>
         </div>
 
@@ -70,10 +148,10 @@ export default function Dashboard() {
               <RiComputerLine className="w-6 h-6 text-purple-600" />
             </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold text-gray-900">12</p>
+          <p className="mt-4 text-3xl font-semibold text-gray-900">{dashboardData.total_screens}</p>
           <div className="mt-2 flex items-center text-sm text-gray-600">
             <RiCheckboxCircleLine className="w-4 h-4 mr-1 text-green-500" />
-            <span>All screens active</span>
+            <span>{dashboardData.active_screens} screens active</span>
           </div>
         </div>
 
@@ -84,10 +162,10 @@ export default function Dashboard() {
               <RiMovie2Line className="w-6 h-6 text-orange-600" />
             </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold text-gray-900">48</p>
+          <p className="mt-4 text-3xl font-semibold text-gray-900">{dashboardData.files_uploaded}</p>
           <div className="mt-2 flex items-center text-sm text-blue-600">
             <RiUploadCloud2Line className="w-4 h-4 mr-1" />
-            <span>23.4 GB used</span>
+            <span>{dashboardData.storage_used_gb.toFixed(2)} GB used</span>
           </div>
         </div>
 
@@ -98,10 +176,14 @@ export default function Dashboard() {
               <RiEyeLine className="w-6 h-6 text-green-600" />
             </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold text-gray-900">8.2K</p>
+          <p className="mt-4 text-3xl font-semibold text-gray-900">{(dashboardData.total_views_current_month / 1000).toFixed(2)}K</p>
           <div className="mt-2 flex items-center text-sm text-green-600">
-            <RiArrowUpLine className="w-4 h-4 mr-1" />
-            <span>18% from last month</span>
+            {dashboardData.views_trend === 'Up' ? (
+              <RiArrowUpLine className="w-4 h-4 mr-1 text-green-600" />
+            ) : (
+              <RiArrowDownLine className="w-4 h-4 mr-1 text-red-600" />
+            )}
+            <span>{dashboardData.views_percentage_change}% from last month</span>
           </div>
         </div>
       </div>
@@ -109,45 +191,37 @@ export default function Dashboard() {
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h2>
-        <div className="space-y-4">
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <RiMegaphoneLine className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">New campaign "Summer Promotion" started</p>
-              <div className="flex items-center text-sm text-gray-500 mt-1">
-                <RiTimeLine className="w-4 h-4 mr-1" />
-                <span>3 days ago</span>
-              </div>
-            </div>
-          </div>
+        <div className="flex flex-wrap gap-4">
+          {recentActivities.map((activity, index) => {
+            let Icon = RiMegaphoneLine;
+            let bgColor = 'bg-blue-100';
+            let textColor = 'text-blue-600';
 
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-              <RiComputerLine className="w-5 h-5 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">2 new screens connected</p>
-              <div className="flex items-center text-sm text-gray-500 mt-1">
-                <RiTimeLine className="w-4 h-4 mr-1" />
-                <span>1 week ago</span>
-              </div>
-            </div>
-          </div>
+            if (activity.activitytype === 'screens') {
+              Icon = RiComputerLine;
+              bgColor = 'bg-purple-100';
+              textColor = 'text-purple-600';
+            } else if (activity.activitytype === 'media') {
+              Icon = RiMovie2Line;
+              bgColor = 'bg-orange-100';
+              textColor = 'text-orange-600';
+            }
 
-          <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-              <RiMovie2Line className="w-5 h-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">5 new media files uploaded</p>
-              <div className="flex items-center text-sm text-gray-500 mt-1">
-                <RiTimeLine className="w-4 h-4 mr-1" />
-                <span>1 week ago</span>
+            return (
+              <div key={index} className="flex items-center space-x-4 min-w-[300px] flex-1">
+                <div className={`flex-shrink-0 w-10 h-10 ${bgColor} rounded-full flex items-center justify-center`}>
+                  <Icon className={`w-5 h-5 ${textColor}`} />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{activity.recentactivity}</p>
+                  <div className="flex items-center text-sm text-gray-500 mt-1">
+                    <RiTimeLine className="w-4 h-4 mr-1" />
+                    <span>{activity.status}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>
