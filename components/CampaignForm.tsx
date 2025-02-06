@@ -108,7 +108,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     };
   }, []);
 
-  // Update markers when screens or selected screens change
+  // Update markers when screens, selected screens, or filtered screens change
   useEffect(() => {
     if (!map.current) return;
 
@@ -146,6 +146,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           .setPopup(popup)
           .addTo(map.current!);
 
+        // Set visibility based on filteredScreens
+        const isVisible = filteredScreens.some(s => s.screenid === screen.screenid);
+        marker.getElement().style.display = isVisible ? 'block' : 'none';
+
         // Store references
         markers.current[screen.screenid] = marker;
         popups.current[screen.screenid] = popup;
@@ -162,7 +166,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     if (!bounds.isEmpty()) {
       map.current.fitBounds(bounds, { padding: 50 });
     }
-  }, [screens, selectedScreens]);
+  }, [screens, selectedScreens, filteredScreens]);
 
   // Load media data
   const loadMediaData = async (customerId: string) => {
@@ -352,6 +356,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const handleSearchWithTags = (tags: string[], term: string) => {
     if (tags.length === 0 && !term.trim()) {
       setFilteredScreens(screens);
+      // Show all markers
+      Object.values(markers.current).forEach(marker => {
+        marker.getElement().style.display = 'block';
+      });
       return;
     }
 
@@ -370,6 +378,12 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     );
 
     setFilteredScreens(filtered);
+
+    // Update marker visibility based on search results
+    Object.entries(markers.current).forEach(([screenId, marker]) => {
+      const isVisible = filtered.some(s => s.screenid === screenId);
+      marker.getElement().style.display = isVisible ? 'block' : 'none';
+    });
   };
 
   // Handle screen search button click
@@ -385,6 +399,10 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     setSearchTags([]);
     if (!showFilteredOnly) {
       setFilteredScreens(screens);
+      // Show all markers
+      Object.values(markers.current).forEach(marker => {
+        marker.getElement().style.display = 'block';
+      });
     }
   };
 
@@ -697,9 +715,16 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                 <button
                   type="button"
                   onClick={() => {
+                    const selectedOnlyScreens = screens.filter(screen => selectedScreens.has(screen.screenid));
+                    setFilteredScreens(selectedOnlyScreens);
                     setShowFilteredOnly(true);
                     setShowAllLink(true);
-                    setFilteredScreens(screens.filter(screen => selectedScreens.has(screen.screenid)));
+                    
+                    // Update marker visibility
+                    Object.entries(markers.current).forEach(([screenId, marker]) => {
+                      const isVisible = selectedOnlyScreens.some(s => s.screenid === screenId);
+                      marker.getElement().style.display = isVisible ? 'block' : 'none';
+                    });
                   }}
                   className="text-sm text-indigo-600 hover:text-indigo-800"
                 >
@@ -712,6 +737,11 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                       setShowFilteredOnly(false);
                       setShowAllLink(false);
                       setFilteredScreens(screens);
+                      
+                      // Show all markers
+                      Object.values(markers.current).forEach(marker => {
+                        marker.getElement().style.display = 'block';
+                      });
                     }}
                     className="text-sm text-gray-500 hover:text-gray-700"
                   >
