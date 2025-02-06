@@ -480,7 +480,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="mx-auto">
       <form id="campaign-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Hidden delete button for parent component to trigger */}
         <button

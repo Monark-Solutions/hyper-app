@@ -216,28 +216,34 @@ export default function Campaign() {
         <Dialog
           open={isDrawerOpen}
           onClose={() => setIsDrawerOpen(false)}
-          className="fixed inset-0 overflow-hidden z-50"
+          className="fixed inset-0 z-50"
         >
-          <div className="absolute inset-0 overflow-hidden">
-            <div className="fixed inset-0 bg-black bg-opacity-40" />
+          <div className="fixed inset-0">
+            <div className="absolute inset-0 bg-black bg-opacity-40" />
 
-            <div className="fixed inset-y-0 right-0 pl-10 max-w-full flex">
-              <div className="w-screen max-w-md">
-                <div className="h-full flex flex-col bg-white shadow-xl">
-                  <div className="flex-1 h-0 overflow-y-auto">
-                    <div className="p-6">
+            <div className="fixed inset-0">
+              <div className="w-full h-full">
+                <div className="h-full flex flex-col bg-white">
+                  <div className="border-b border-gray-200 bg-white px-8 py-6">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-semibold text-gray-900">
+                        {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
+                      </h2>
+                      <button
+                        onClick={() => setIsDrawerOpen(false)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        <FiX className="w-6 h-6" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="p-8">
                       <CampaignForm campaignId={editCampaignId} mediaId={0} />
                     </div>
                   </div>
-                  <div className="flex-shrink-0 px-4 py-4 flex justify-end bg-gray-50">
-                    <div className="flex items-center gap-4">
-                      <button
-                        type="button"
-                        className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                        onClick={() => setIsDrawerOpen(false)}
-                      >
-                        Cancel
-                      </button>
+                  <div className="flex-shrink-0 px-8 py-6 flex justify-end border-t border-gray-200 bg-white">
+                    <div className="flex items-center gap-6">
                       {editCampaignId > 0 && (
                         <button
                           type="button"
