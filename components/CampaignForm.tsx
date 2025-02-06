@@ -90,7 +90,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v11',
-      center: [72.5714, 23.0225], // Default to India's center
+      center: [174.7633, -41.2865], // Default to New Zealand's center
       zoom: 8
     });
 
