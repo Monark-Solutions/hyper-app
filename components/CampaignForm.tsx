@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Select from 'react-select';
 import { FiSearch, FiX } from 'react-icons/fi';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 import supabase from '@/lib/supabase';
 import { Campaign, CampaignFormProps, CampaignScreen, Media, Screen, Tag } from '@/types/campaign';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+
+// Set access token
+mapboxgl.accessToken = 'pk.eyJ1IjoicmF4aXRnb2hlbCIsImEiOiJjbGF3MGVhajUwOWQ5M3BwNDgydnBkNmR4In0.9UL0prYTv9r5SBXXUIM-9Q';
 
 export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps) {
   const router = useRouter();
@@ -35,30 +40,129 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     duration: 7,
   });
 
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredScreens.length]);
+  // Map reference
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markers = useRef<{ [key: string]: mapboxgl.Marker }>({});
+  const popups = useRef<{ [key: string]: mapboxgl.Popup }>({});
 
-  // Check user authentication
-  useEffect(() => {
-    const userDetailsStr = localStorage.getItem('userDetails');
-    if (!userDetailsStr) {
-      router.push('/');
-    } else {
-      try {
-        const userDetails = JSON.parse(userDetailsStr);
-        if (userDetails?.customerId) {
-          // Load media and screens data
-          loadMediaData(userDetails.customerId);
-          loadScreensData(userDetails.customerId);
-        }
-      } catch (error) {
-        console.error('Error parsing user details:', error);
-        router.push('/');
+  // Handle campaign deletion
+  const handleDelete = async () => {
+    if (!campaignId) return;
+
+    try {
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#EF4444',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete it!'
+      });
+
+      if (result.isConfirmed) {
+        const { error } = await supabase
+          .from('campaigns')
+          .update({ isdeleted: true })
+          .eq('campaignid', campaignId);
+
+        if (error) throw error;
+
+        Swal.fire(
+          'Deleted!',
+          'Campaign has been deleted.',
+          'success'
+        ).then(() => {
+          window.dispatchEvent(new Event('closeDrawer'));
+        });
       }
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      Swal.fire('Error', 'Failed to delete campaign', 'error');
     }
-  }, [router]);
+  };
+
+  // Initialize map
+  useEffect(() => {
+    if (map.current || !mapContainer.current) return;
+
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v11',
+      center: [72.5714, 23.0225], // Default to India's center
+      zoom: 8
+    });
+
+    // Clean up function
+    return () => {
+      // Remove all markers and popups
+      Object.values(markers.current).forEach(marker => marker.remove());
+      Object.values(popups.current).forEach(popup => popup.remove());
+      markers.current = {};
+      popups.current = {};
+      
+      // Remove map
+      map.current?.remove();
+      map.current = null;
+    };
+  }, []);
+
+  // Update markers when screens or selected screens change
+  useEffect(() => {
+    if (!map.current) return;
+
+    // Remove existing markers and popups
+    Object.values(markers.current).forEach(marker => marker.remove());
+    Object.values(popups.current).forEach(popup => popup.remove());
+    markers.current = {};
+    popups.current = {};
+
+    // Add new markers for each screen
+    screens.forEach(screen => {
+      if (screen.latitude && screen.longitude) {
+        // Create popup
+        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+          <div class="p-2">
+            <h3 class="font-medium text-sm">${screen.screenname}</h3>
+            <p class="text-xs text-gray-600 mt-1">${screen.screenlocation}</p>
+            ${screen.tags.length > 0 ? `
+              <div class="flex flex-wrap gap-1 mt-2">
+                ${screen.tags.map(tag => `
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                    ${tag.tagname}
+                  </span>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+        `);
+
+        // Create marker
+        const marker = new mapboxgl.Marker({
+          color: selectedScreens.has(screen.screenid) ? '#4F46E5' : '#6B7280'
+        })
+          .setLngLat([screen.longitude, screen.latitude])
+          .setPopup(popup)
+          .addTo(map.current!);
+
+        // Store references
+        markers.current[screen.screenid] = marker;
+        popups.current[screen.screenid] = popup;
+      }
+    });
+
+    // Fit map bounds to include all markers
+    const bounds = new mapboxgl.LngLatBounds();
+    screens.forEach(screen => {
+      if (screen.latitude && screen.longitude) {
+        bounds.extend([screen.longitude, screen.latitude]);
+      }
+    });
+    if (!bounds.isEmpty()) {
+      map.current.fitBounds(bounds, { padding: 50 });
+    }
+  }, [screens, selectedScreens]);
 
   // Load media data
   const loadMediaData = async (customerId: string) => {
@@ -95,6 +199,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         screenlocation,
         customerid,
         isdeleted,
+        latitude,
+        longitude,
         screentags:screentags(
           id,
           tagid,
@@ -132,6 +238,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           screenlocation: screen.screenlocation,
           customerid: screen.customerid,
           isdeleted: screen.isdeleted,
+          latitude: screen.latitude,
+          longitude: screen.longitude,
           tags
         };
       });
@@ -140,6 +248,26 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
       setFilteredScreens(transformedScreens);
     }
   };
+
+  // Check user authentication and load data
+  useEffect(() => {
+    const userDetailsStr = localStorage.getItem('userDetails');
+    if (!userDetailsStr) {
+      router.push('/');
+      return;
+    }
+
+    try {
+      const userDetails = JSON.parse(userDetailsStr);
+      if (userDetails?.customerId) {
+        loadMediaData(userDetails.customerId);
+        loadScreensData(userDetails.customerId);
+      }
+    } catch (error) {
+      console.error('Error parsing user details:', error);
+      router.push('/');
+    }
+  }, [router]);
 
   // Fetch campaign data if editing
   useEffect(() => {
@@ -269,15 +397,43 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
       newSelected.add(screenId);
     }
     setSelectedScreens(newSelected);
+
+    // Update marker color
+    const marker = markers.current[screenId];
+    if (marker) {
+      marker.remove();
+      const screen = screens.find(s => s.screenid === screenId);
+      if (screen && screen.latitude && screen.longitude) {
+        markers.current[screenId] = new mapboxgl.Marker({
+          color: newSelected.has(screenId) ? '#4F46E5' : '#6B7280'
+        })
+          .setLngLat([screen.longitude, screen.latitude])
+          .setPopup(popups.current[screenId])
+          .addTo(map.current!);
+      }
+    }
   };
 
   // Handle select all screens
   const handleSelectAll = () => {
-    if (selectedScreens.size === filteredScreens.length) {
-      setSelectedScreens(new Set());
-    } else {
-      setSelectedScreens(new Set(filteredScreens.map(s => s.screenid)));
-    }
+    const newSelected = selectedScreens.size === filteredScreens.length
+      ? new Set<string>()
+      : new Set(filteredScreens.map(s => s.screenid));
+    setSelectedScreens(newSelected);
+
+    // Update all marker colors
+    filteredScreens.forEach(screen => {
+      const marker = markers.current[screen.screenid];
+      if (marker && screen.latitude && screen.longitude) {
+        marker.remove();
+        markers.current[screen.screenid] = new mapboxgl.Marker({
+          color: newSelected.has(screen.screenid) ? '#4F46E5' : '#6B7280'
+        })
+          .setLngLat([screen.longitude, screen.latitude])
+          .setPopup(popups.current[screen.screenid])
+          .addTo(map.current!);
+      }
+    });
   };
 
   // Form submission
@@ -433,54 +589,15 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     }
   };
 
-  // Handle campaign deletion
-  const handleDelete = async () => {
-    if (campaignId <= 0) return;
-
-    const result = await Swal.fire({
-      title: 'Are you sure?',
-      text: "You won't be able to revert this!",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#d33',
-      cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Yes, delete it!'
-    });
-
-    if (result.isConfirmed) {
-      try {
-        // Update campaign isdeleted to true
-        const { error: updateError } = await supabase
-          .from('campaigns')
-          .update({ isdeleted: true })
-          .eq('campaignid', campaignId);
-
-        if (updateError) throw updateError;
-
-        Swal.fire('Deleted!', 'Campaign has been deleted.', 'success').then(() => {
-          window.dispatchEvent(new Event('closeDrawer'));
-        });
-      } catch (error) {
-        console.error('Error deleting campaign:', error);
-        Swal.fire('Error', 'Failed to delete campaign', 'error');
-      }
-    }
-  };
-
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
-  const selectClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
-  const searchInputClasses = "w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 pr-20";
 
   // Get current page's screens
   const indexOfLastScreen = currentPage * screensPerPage;
   const indexOfFirstScreen = indexOfLastScreen - screensPerPage;
   const currentScreens = filteredScreens.slice(indexOfFirstScreen, indexOfLastScreen);
 
-  // Get current date in YYYY-MM-DD format for min attribute
-  const today = new Date().toISOString().split('T')[0];
-
   return (
-    <div className="mx-auto">
+    <div className="w-full h-full">
       <form id="campaign-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Hidden delete button for parent component to trigger */}
         <button
@@ -490,45 +607,45 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           className="hidden"
         />
 
-        {/* Campaign Name */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Campaign Name</label>
-          <input
-            type="text"
-            value={formData.campaignName}
-            onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
-            className={inputClasses}
-            required
-            autoFocus
-          />
-        </div>
-
-        {/* Media File Dropdown */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Media File</label>
-          <Select
-            value={media.find(item => item.mediaid === formData.mediaId)
-              ? { value: formData.mediaId, label: media.find(item => item.mediaid === formData.mediaId)?.medianame }
-              : null}
-            onChange={(option) => setFormData({ ...formData, mediaId: option ? Number(option.value) : 0 })}
-            options={media.map(item => ({
-              value: item.mediaid,
-              label: item.medianame
-            }))}
-            isDisabled={campaignId > 0 || mediaId > 0}
-            isClearable={true}
-            isSearchable={true}
-            placeholder="Select Media File"
-            className="mt-1"
-            classNames={{
-              control: (state) => 
-                `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
-              input: () => "!text-sm",
-              option: () => "!text-sm",
-              placeholder: () => "!text-sm !text-slate-400",
-              singleValue: () => "!text-sm"
-            }}
-          />
+        {/* Campaign Name and Media File in a grid */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Campaign Name</label>
+            <input
+              type="text"
+              value={formData.campaignName}
+              onChange={(e) => setFormData({ ...formData, campaignName: e.target.value })}
+              className={inputClasses}
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Media File</label>
+            <Select
+              value={media.find(item => item.mediaid === formData.mediaId)
+                ? { value: formData.mediaId, label: media.find(item => item.mediaid === formData.mediaId)?.medianame }
+                : null}
+              onChange={(option) => setFormData({ ...formData, mediaId: option ? Number(option.value) : 0 })}
+              options={media.map(item => ({
+                value: item.mediaid,
+                label: item.medianame
+              }))}
+              isDisabled={campaignId > 0 || mediaId > 0}
+              isClearable={true}
+              isSearchable={true}
+              placeholder="Select Media File"
+              className="mt-1"
+              classNames={{
+                control: (state) => 
+                  `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                input: () => "!text-sm",
+                option: () => "!text-sm",
+                placeholder: () => "!text-sm !text-slate-400",
+                singleValue: () => "!text-sm"
+              }}
+            />
+          </div>
         </div>
 
         {/* Playback Duration for Image Files */}
@@ -554,7 +671,6 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.startDate}
               onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-              // min={today}
               className={inputClasses}
               required
             />
@@ -565,7 +681,6 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
               type="date"
               value={formData.endDate}
               onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-              // min={formData.startDate || today}
               className={inputClasses}
               required
             />
@@ -573,179 +688,156 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
         </div>
 
         {/* Screens Section */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Select Screens</h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowFilteredOnly(true);
-                  setShowAllLink(true);
-                  setFilteredScreens(screens.filter(screen => selectedScreens.has(screen.screenid)));
-                }}
-                className="text-sm text-indigo-600 hover:text-indigo-800"
-              >
-                {selectedScreens.size} {selectedScreens.size === 1 ? 'screen' : 'screens'} selected
-              </button>
-              {showAllLink && (
+        <div className="grid grid-cols-2 gap-8">
+          {/* Left Column: Screen Selection */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-gray-900">Select Screens</h2>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setShowFilteredOnly(false);
-                    setShowAllLink(false);
-                    setFilteredScreens(screens);
+                    setShowFilteredOnly(true);
+                    setShowAllLink(true);
+                    setFilteredScreens(screens.filter(screen => selectedScreens.has(screen.screenid)));
                   }}
-                  className="text-sm text-gray-500 hover:text-gray-700"
+                  className="text-sm text-indigo-600 hover:text-indigo-800"
                 >
-                  All
+                  {selectedScreens.size} {selectedScreens.size === 1 ? 'screen' : 'screens'} selected
                 </button>
-              )}
-            </div>
-          </div>
-          
-          {/* Search Box */}
-          <div className="flex gap-2 mb-4">
-            <div className="relative flex-1">
-              <div className="flex flex-wrap gap-2 px-3 py-2 bg-white border border-slate-300 rounded-md focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
-                {searchTags.map((tag, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
-                  >
-                    {tag}
-                    <button
-                      type="button"
-                      onClick={() => removeTag(tag)}
-                      className="ml-1.5 h-4 w-4 flex items-center justify-center hover:text-indigo-900"
-                    >
-                      <FiX className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={searchTags.length === 0 ? "Search screens..." : ""}
-                  className="flex-1 min-w-[120px] outline-none text-sm"
-                />
-              </div>
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (searchTerm.trim()) {
-                      setSearchTags([...searchTags, searchTerm.trim()]);
-                      setSearchTerm('');
-                    }
-                    handleSearch();
-                  }}
-                  className="p-1 text-gray-400 hover:text-gray-600"
-                >
-                  <FiSearch className="w-5 h-5" />
-                </button>
-                {(searchTags.length > 0 || searchTerm) && (
+                {showAllLink && (
                   <button
                     type="button"
-                    onClick={handleClearSearch}
-                    className="p-1 text-gray-400 hover:text-gray-600"
+                    onClick={() => {
+                      setShowFilteredOnly(false);
+                      setShowAllLink(false);
+                      setFilteredScreens(screens);
+                    }}
+                    className="text-sm text-gray-500 hover:text-gray-700"
                   >
-                    <FiX className="w-5 h-5" />
+                    All
                   </button>
                 )}
               </div>
             </div>
-          </div>
-
-          {/* Screens Table */}
-          <div className="border rounded-lg overflow-hidden">
-            <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 table-fixed md:table-auto">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="w-[50px] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <input
-                        type="checkbox"
-                        checked={selectedScreens.size === filteredScreens.length}
-                        onChange={handleSelectAll}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                    </th>
-                    <th className="w-[25%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Screen Name
-                    </th>
-                    <th className="w-[30%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
-                    </th>
-                    <th className="w-[45%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Tags
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {currentScreens.map((screen) => (
-                    <tr key={screen.screenid}>
-                      <td className="px-3 md:px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedScreens.has(screen.screenid)}
-                          onChange={() => handleScreenSelect(screen.screenid)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-3 md:px-6 py-4 truncate" title={screen.screenname}>{screen.screenname}</td>
-                      <td className="px-3 md:px-6 py-4 truncate" title={screen.screenlocation}>{screen.screenlocation}</td>
-                      <td className="px-3 md:px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {screen.tags.map((tag) => (
-                            <span
-                              key={tag.tagid}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 max-w-[150px] truncate"
-                              title={tag.tagname}
-                            >
-                              {tag.tagname}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
+            
+            {/* Search Box */}
+            <div className="flex gap-2 mb-4">
+              <div className="relative flex-1">
+                <div className="flex flex-wrap gap-2 px-3 py-2 bg-white border border-slate-300 rounded-md focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
+                  {searchTags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="ml-1.5 h-4 w-4 flex items-center justify-center hover:text-indigo-900"
+                      >
+                        <FiX className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {filteredScreens.length > screensPerPage && (
-              <div className="border-t border-gray-200 px-6 py-4 bg-white">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing {Math.min((currentPage - 1) * screensPerPage + 1, filteredScreens.length)} to{' '}
-                    {Math.min(currentPage * screensPerPage, filteredScreens.length)} of{' '}
-                    {filteredScreens.length} screens
-                  </div>
-                  <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={searchTags.length === 0 ? "Search screens..." : ""}
+                    className="flex-1 min-w-[120px] outline-none text-sm"
+                  />
+                </div>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (searchTerm.trim()) {
+                        setSearchTags([...searchTags, searchTerm.trim()]);
+                        setSearchTerm('');
+                      }
+                      handleSearch();
+                    }}
+                    className="p-1 text-gray-400 hover:text-gray-600"
+                  >
+                    <FiSearch className="w-5 h-5" />
+                  </button>
+                  {(searchTags.length > 0 || searchTerm) && (
                     <button
                       type="button"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      onClick={handleClearSearch}
+                      className="p-1 text-gray-400 hover:text-gray-600"
                     >
-                      Previous
+                      <FiX className="w-5 h-5" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredScreens.length / screensPerPage)))}
-                      disabled={currentPage >= Math.ceil(filteredScreens.length / screensPerPage)}
-                      className="px-3 py-1 border border-gray-300 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                    >
-                      Next
-                    </button>
-                  </div>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* Screens Table */}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 table-fixed md:table-auto">
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="w-[50px] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <input
+                          type="checkbox"
+                          checked={selectedScreens.size === filteredScreens.length}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </th>
+                      <th className="w-[25%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Screen Name
+                      </th>
+                      <th className="w-[30%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Location
+                      </th>
+                      <th className="w-[45%] px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Tags
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {currentScreens.map((screen) => (
+                      <tr key={screen.screenid}>
+                        <td className="px-3 md:px-6 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedScreens.has(screen.screenid)}
+                            onChange={() => handleScreenSelect(screen.screenid)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-3 md:px-6 py-4 truncate" title={screen.screenname}>{screen.screenname}</td>
+                        <td className="px-3 md:px-6 py-4 truncate" title={screen.screenlocation}>{screen.screenlocation}</td>
+                        <td className="px-3 md:px-6 py-4">
+                          <div className="flex flex-wrap gap-1">
+                            {screen.tags.map((tag) => (
+                              <span
+                                key={tag.tagid}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 max-w-[150px] truncate"
+                                title={tag.tagname}
+                              >
+                                {tag.tagname}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Map */}
+          <div className="h-[600px] bg-gray-100 rounded-lg overflow-hidden">
+            <div ref={mapContainer} className="w-full h-full" />
           </div>
         </div>
       </form>

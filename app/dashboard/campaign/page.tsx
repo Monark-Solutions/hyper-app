@@ -214,61 +214,35 @@ export default function Campaign() {
 
         {/* Campaign Form Dialog */}
         <Dialog
+          as="div"
+          className="fixed inset-0 z-50"
           open={isDrawerOpen}
           onClose={() => setIsDrawerOpen(false)}
-          className="fixed inset-0 z-50"
         >
+          <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
           <div className="fixed inset-0">
-            <div className="absolute inset-0 bg-black bg-opacity-40" />
-
-            <div className="fixed inset-0">
-              <div className="w-full h-full">
-                <div className="h-full flex flex-col bg-white">
-                  <div className="border-b border-gray-200 bg-white px-8 py-6">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
-                      </h2>
-                      <button
-                        onClick={() => setIsDrawerOpen(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        <FiX className="w-6 h-6" />
-                      </button>
-                    </div>
+            <Dialog.Panel className="w-full h-full bg-white">
+              <div className="h-full flex flex-col">
+                <div className="border-b border-gray-200 px-8 py-6">
+                  <div className="flex items-center justify-between max-w-[1920px] mx-auto">
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
+                    </h2>
+                    <button
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <FiX className="w-6 h-6" />
+                    </button>
                   </div>
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="p-8">
-                      <CampaignForm campaignId={editCampaignId} mediaId={0} />
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 px-8 py-6 flex justify-end border-t border-gray-200 bg-white">
-                    <div className="flex items-center gap-6">
-                      {editCampaignId > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const form = document.getElementById('campaign-form') as HTMLFormElement;
-                            const deleteButton = form.querySelector('[data-action="delete"]') as HTMLButtonElement;
-                            deleteButton?.click();
-                          }}
-                          className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        >
-                          Delete Campaign
-                        </button>
-                      )}
-                      <button
-                        type="submit"
-                        form="campaign-form"
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
-                        {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
-                      </button>
-                    </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <div className="p-8 w-full h-full">
+                    <CampaignForm campaignId={editCampaignId} mediaId={0} />
                   </div>
                 </div>
               </div>
-            </div>
+            </Dialog.Panel>
           </div>
         </Dialog>
       </div>
