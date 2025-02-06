@@ -125,22 +125,6 @@ export default function Home() {
       {/* Login Form */}
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <form className="space-y-6" onSubmit={handleSubmit}>
-          {/* Customer ID Input */}
-          <div>
-            <label htmlFor="customerId" className="block text-sm font-medium text-gray-700">
-              Customer ID
-            </label>
-            <input
-              type="text"
-              id="customerId"
-              name="customerId"
-              value={formData.customerId}
-              onChange={handleChange}
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your customer ID"
-              required
-            />
-          </div>
 
           {/* Username Input */}
           <div>
@@ -172,6 +156,23 @@ export default function Home() {
               onChange={handleChange}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your password"
+              required
+            />
+          </div>
+
+          {/* Customer ID Input */}
+          <div>
+            <label htmlFor="customerId" className="block text-sm font-medium text-gray-700">
+              Company ID
+            </label>
+            <input
+              type="text"
+              id="customerId"
+              name="customerId"
+              value={formData.customerId}
+              onChange={handleChange}
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter your customer ID"
               required
             />
           </div>

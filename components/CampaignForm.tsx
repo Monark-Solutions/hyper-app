@@ -146,6 +146,18 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
           .setPopup(popup)
           .addTo(map.current!);
 
+        // Add click handler to marker element
+        marker.getElement().addEventListener('click', () => {
+          // Fly to clicked marker with animation
+          if (map.current) {
+            map.current.flyTo({
+              center: [screen.longitude, screen.latitude],
+              zoom: 14, // Zoom level when marker is clicked
+              duration: 1500 // Animation duration in milliseconds
+            });
+          }
+        });
+
         // Set visibility based on filteredScreens
         const isVisible = filteredScreens.some(s => s.screenid === screen.screenid);
         marker.getElement().style.display = isVisible ? 'block' : 'none';
