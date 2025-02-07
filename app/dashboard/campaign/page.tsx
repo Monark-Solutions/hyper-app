@@ -223,7 +223,7 @@ export default function Campaign() {
             <div className="fixed inset-0">
               <Dialog.Panel className="w-full h-full bg-white">
                 <div className="h-full flex flex-col">
-                  <div className="border-b border-gray-200 px-8 py-6">
+                  <div className="border-b border-gray-200 px-8 py-4">
                     <div className="flex items-center justify-between max-w-[1920px] mx-auto">
                       <h2 className="text-xl font-semibold text-gray-900">
                         {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
@@ -237,11 +237,11 @@ export default function Campaign() {
                     </div>
                   </div>
                   <div className="flex-1 overflow-y-auto">
-                    <div className="p-8 w-full h-full">
+                    <div className="px-6 py-2 w-full h-full">
                       <CampaignForm campaignId={editCampaignId} mediaId={0} />
                     </div>
                   </div>
-                  <div className="flex-shrink-0 px-8 py-6 flex justify-end border-t border-gray-200 bg-white">
+                  <div className="flex-shrink-0 px-8 py-4 flex justify-end border-t border-gray-200 bg-white">
                     <div className="flex items-center gap-6">
                       {editCampaignId > 0 && (
                         <button
@@ -414,7 +414,7 @@ export default function Campaign() {
                       campaign.state === 'Completed' 
                         ? 'bg-green-600' 
                         : campaign.state === 'Active' 
-                          ? 'bg-blue-600' 
+                          ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-600' 
                           : 'bg-gray-400'
                     }`} 
                     style={{ width: `${campaign.progress}%` }}

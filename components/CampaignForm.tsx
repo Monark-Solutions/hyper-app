@@ -108,8 +108,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     };
   }, []);
 
-  // Update markers when screens, selected screens, or filtered screens change
-  useEffect(() => {
+  // Function to load and update map markers
+  const loadMap = () => {
     if (!map.current) return;
 
     // Remove existing markers and popups
@@ -122,21 +122,43 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     screens.forEach(screen => {
       if (screen.latitude && screen.longitude) {
         // Create popup
-        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-          <div class="p-2">
-            <h3 class="font-medium text-sm">${screen.screenname}</h3>
-            <p class="text-xs text-gray-600 mt-1">${screen.screenlocation}</p>
-            ${screen.tags.length > 0 ? `
-              <div class="flex flex-wrap gap-1 mt-2">
-                ${screen.tags.map(tag => `
-                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                    ${tag.tagname}
-                  </span>
-                `).join('')}
-              </div>
-            ` : ''}
-          </div>
-        `);
+        // Create popup element
+        const popupElement = document.createElement('div');
+        popupElement.className = 'p-2';
+        popupElement.innerHTML = `
+          <h3 class="font-medium text-sm">${screen.screenname}</h3>
+          <p class="text-xs text-gray-600 mt-1">${screen.screenlocation}</p>
+          ${screen.tags.length > 0 ? `
+            <div class="flex flex-wrap gap-1 mt-2">
+              ${screen.tags.map(tag => `
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                  ${tag.tagname}
+                </span>
+              `).join('')}
+            </div>
+          ` : ''}
+          <button class="mt-2 w-full px-2 py-1 text-xs font-medium text-white ${
+            selectedScreens.has(screen.screenid) 
+              ? 'bg-red-500 hover:bg-red-600' 
+              : 'bg-indigo-600 hover:bg-indigo-700'
+          } rounded">
+            ${selectedScreens.has(screen.screenid) ? 'Remove from Campaign' : 'Add to Campaign'}
+          </button>
+        `;
+
+        // Add click handler to the button
+        const button = popupElement.querySelector('button');
+        if (button) {
+          button.addEventListener('click', () => {
+            handleScreenSelect(screen.screenid);
+            // Close the popup after selection
+            popups.current[screen.screenid].remove();
+          });
+        }
+
+        // Create popup with the element
+        const popup = new mapboxgl.Popup({ offset: 25 })
+          .setDOMContent(popupElement);
 
         // Create marker
         const marker = new mapboxgl.Marker({
@@ -178,6 +200,11 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
     if (!bounds.isEmpty()) {
       map.current.fitBounds(bounds, { padding: 50 });
     }
+  };
+
+  // Update markers when screens, selected screens, or filtered screens change
+  useEffect(() => {
+    loadMap();
   }, [screens, selectedScreens, filteredScreens]);
 
   // Load media data
@@ -262,6 +289,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
       setScreens(transformedScreens);
       setFilteredScreens(transformedScreens);
+      loadMap();
     }
   };
 
@@ -627,7 +655,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
   const currentScreens = filteredScreens.slice(indexOfFirstScreen, indexOfLastScreen);
 
   return (
-    <div className="w-full h-full p-4 md:p-6">
+    <div className="w-full h-full px-4 md:px-6">
       <form id="campaign-form" onSubmit={handleSubmit} className="space-y-6">
         {/* Hidden delete button for parent component to trigger */}
         <button
@@ -818,7 +846,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
 
             {/* Screens Table */}
             <div className="border rounded-lg overflow-hidden">
-              <div className="max-h-[300px] md:max-h-[400px] overflow-y-auto overflow-x-auto">
+              <div className="max-h-[400px] md:max-h-[500px] overflow-y-auto overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
