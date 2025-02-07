@@ -511,6 +511,13 @@ export default function Screens(): React.ReactElement {
             >
               <FiSend className="w-5 h-5" />
             </button>
+            <button 
+              onClick={() => fetchScreens(true)}
+              className="p-2 text-gray-600 hover:text-gray-800"
+            >
+              <FiRefreshCw className="w-5 h-5" />
+            </button>
+            
           </div>
         </div>
 
