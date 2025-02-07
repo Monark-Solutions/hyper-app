@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Campaign } from '@/types/campaign';
 import supabase from '@/lib/supabase';
-import * as XLSX from 'xlsx';
 import LoadingOverlay from 'react-loading-overlay-ts';
 import Image from 'next/image';
 import Swal from 'sweetalert2';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import dayjs from 'dayjs';
 
 interface ScreenInfo {
   screenname: string;
@@ -86,6 +88,12 @@ export default function Reports() {
     return true;
   };
 
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const formatDate = (date: string) => {
+    return dayjs(date).format('DD-MM-YYYY');
+  };
+
   const handleGenerateReport = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -101,9 +109,9 @@ export default function Reports() {
 
       // Fetch campaign data
       const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
-        p_campaign_id: selectedCampaign,
-        p_start_date: startDate,
-        p_end_date: endDate
+        _campaignid: selectedCampaign,
+        _startdate: startDate,
+        _enddate: endDate
       });
 
       if (rpcError) throw new Error(rpcError.message);
@@ -113,64 +121,93 @@ export default function Reports() {
       setProgress(30);
       setProgressText('Generating report...');
 
-      // Generate Excel file
-      const workbook = XLSX.utils.book_new();
-      
-      // Campaign Summary Sheet
-      const summaryData = [
-        ['HYPER'],
-        ['Campaign Name', data[0].campaignname],
-        ['Campaign Dates', `${data[0].startdate} - ${data[0].enddate}`],
-        ['Total Sites', data[0].totalsites],
-        ['Total Views', data[0].totalviews],
-      ];
-      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Campaign Summary');
-
-      // Screen Performance Sheet
-      const screenHeaders = [['Screen Name', 'Location', 'Total Views']];
-      const screenData = data[0].screeninfo.map((screen: ScreenInfo) => [
-        screen.screenname,
-        screen.screenlocation,
-        screen.screentotalviews
-      ]);
-      const screenSheet = XLSX.utils.aoa_to_sheet([...screenHeaders, ...screenData]);
-      XLSX.utils.book_append_sheet(workbook, screenSheet, 'Screen Performance');
+      // Generate PDF
+      if (!reportRef.current) return;
 
       setProgress(60);
-      setProgressText('Preparing file for download...');
+      setProgressText('Generating PDF...');
 
-      // Generate Excel file
-      const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `campaign-report-${timestamp}.xlsx`;
+      // Prepare for PDF generation
+      setProgressText('Preparing PDF...');
 
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('MediaLibrary')
-        .upload(`${userDetails.customerId}/${fileName}`, excelBuffer, {
-          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      // Create a temporary image to ensure it's loaded
+      const tempImg = document.createElement('img');
+      await new Promise<void>((resolve, reject) => {
+        tempImg.onload = () => resolve();
+        tempImg.onerror = () => reject(new Error('Failed to load image'));
+        tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
+      });
+
+      // Wait for DOM updates
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+
+      // Apply styles for PDF generation
+      const style = document.createElement('style');
+      style.innerHTML = `
+        .text-blue-800 { color: rgb(30, 64, 175) !important; }
+        th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        img {
+          object-fit: contain !important;
+          border-radius: 0.5rem !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Generate canvas with better quality
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: reportRef.current.offsetWidth,
+        height: reportRef.current.offsetHeight,
+        imageTimeout: 0,
+        onclone: (doc) => {
+          // Ensure styles are applied in cloned document
+          doc.head.appendChild(style.cloneNode(true));
+        }
+      });
+
+      setProgressText('Generating PDF...');
+
+      try {
+        // Create PDF with high quality
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+          compress: true,
+          putOnlyUsedFonts: true
         });
 
-      if (uploadError) throw new Error('Failed to upload report');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const margin = 10;
+        const contentWidth = pdfWidth - (margin * 2);
+        const contentHeight = (canvas.height * contentWidth) / canvas.width;
 
-      setProgress(80);
-      setProgressText('Downloading report...');
+        // Add image to PDF with better quality
+        pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight, undefined, 'FAST');
 
-      // Get download URL
-      const { data: urlData } = supabase.storage
-        .from('MediaLibrary')
-        .getPublicUrl(`${userDetails.customerId}/${fileName}`);
+        // Generate filename with timestamp
+        const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
+        const fileName = `campaign-report-${timestamp}.pdf`;
 
-      if (!urlData?.publicUrl) throw new Error('Failed to generate download link');
+        // Save PDF directly
+        pdf.save(fileName);
 
-      // Trigger download
-      const link = document.createElement('a');
-      link.href = urlData.publicUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+        // Clean up
+        document.head.removeChild(style);
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        throw new Error('Failed to generate PDF');
+      }
 
       setProgress(100);
       setProgressText('Report generated successfully!');
@@ -197,50 +234,56 @@ export default function Reports() {
   };
 
   const ReportPreview = ({ data }: { data: ReportData }) => (
-    <div className="mt-6 p-6 border rounded-lg bg-white">
-      <div className="mb-6">
-        <span className="text-2xl font-bold text-blue-600">HYPER</span>
+    <div ref={reportRef} className="mt-6 p-10 border rounded-lg bg-white print:p-0 print:border-0">
+      <div className="mb-12">
+        <span className="text-6xl font-black text-blue-800 tracking-wider">HYPER</span>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h2 className="text-xl font-semibold mb-4">{data.campaignname}</h2>
-          <p className="text-gray-600 mb-2">Campaign Dates</p>
-          <p className="font-medium mb-4">{data.startdate} - {data.enddate}</p>
+      <div className="flex items-start">
+        {/* Left side content */}
+        <div className="flex-1 pr-8">
+          <h2 className="text-5xl font-bold mb-10">{data.campaignname}</h2>
+          <div className="mb-10">
+            <p className="text-gray-700 mb-2">Campaign Dates</p>
+            <p className="font-medium">{formatDate(data.startdate)} - {formatDate(data.enddate)}</p>
+          </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-gray-600">No. of Sites</p>
-              <p className="text-xl font-semibold">{data.totalsites}</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Total Views</p>
-              <p className="text-xl font-semibold">{data.totalviews}</p>
-            </div>
+          <div>
+            <p className="text-2xl font-bold text-gray-700 mb-3">No. of Sites</p>
+            <p className="text-2xl text-gray-600">{data.totalsites}</p>
           </div>
         </div>
         
-        <div className="relative h-48 md:h-full">
-          <Image
-            src={`data:image/jpeg;base64,${data.thumbnail}`}
-            alt="Campaign Thumbnail"
-            fill
-            style={{ objectFit: 'contain' }}
-          />
+        {/* Right side content */}
+        <div className="w-[450px]">
+          <div className="relative w-full h-[250px]">
+            <Image
+              src={`data:image/jpeg;base64,${data.thumbnail}`}
+              alt="Campaign Thumbnail"
+              fill
+              style={{ objectFit: 'contain' }}
+              priority
+              className="rounded-lg"
+            />
+          </div>
+          <div className="mt-8">
+            <p className="text-2xl font-bold text-gray-700 mb-3">Total Views</p>
+            <p className="text-2xl text-gray-600">{data.totalviews}</p>
+          </div>
         </div>
       </div>
 
-      <div className="mt-8">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="mt-24 print:mt-20">
+        <table className="min-w-full divide-y divide-gray-200 print:divide-y-2">
           <thead>
             <tr>
-              <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
                 Screen Name
               </th>
-              <th className="px-6 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
                 Location
               </th>
-              <th className="px-6 py-3 bg-gray-50 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 bg-black text-right text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
                 Total Views
               </th>
             </tr>
