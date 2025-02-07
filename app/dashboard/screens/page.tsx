@@ -18,6 +18,8 @@ interface ScreenDetails {
   endtime: string;
   screenemail: string;
   screenuniqueid: string;
+  latitude?: string;
+  longitude?: string;
   tags?: number[];
   id?: number;
 }
@@ -398,6 +400,8 @@ export default function Screens(): React.ReactElement {
         endtime: screenDetails.endtime,
         screenemail: screenDetails.screenemail,
         screenuniqueid: screenDetails.screenuniqueid,
+        latitude: screenDetails.latitude,
+        longitude: screenDetails.longitude,
         updateguid: generateGuid()
       })
       .eq('screenid', selectedScreenId);
@@ -501,21 +505,33 @@ export default function Screens(): React.ReactElement {
           <div className="flex gap-2">
             <button 
               onClick={toggleAllScreens}
-              className="p-2 text-gray-600 hover:text-gray-800"
+              className="p-2 text-gray-600 hover:text-gray-800 relative group"
             >
               <FiCheckSquare className="w-5 h-5" />
+              <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
+                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                Select/Deselect All
+              </div>
             </button>
             <button 
               onClick={() => fetchScreens(true)}
-              className="p-2 text-gray-600 hover:text-gray-800"
+              className="p-2 text-gray-600 hover:text-gray-800 relative group"
             >
               <FiSend className="w-5 h-5" />
+              <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
+                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                Send Update Notification
+              </div>
             </button>
             <button 
               onClick={() => fetchScreens(true)}
-              className="p-2 text-gray-600 hover:text-gray-800"
+              className="p-2 text-gray-600 hover:text-gray-800 relative group"
             >
               <FiRefreshCw className="w-5 h-5" />
+              <div className="absolute -bottom-10 left-1/2 transform -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
+                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-800 rotate-45"></div>
+                Refresh Screens List
+              </div>
             </button>
             
           </div>
@@ -894,6 +910,28 @@ export default function Screens(): React.ReactElement {
                               placeholder: () => "!text-sm !text-slate-400",
                               singleValue: () => "!text-sm"
                             }}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Latitude</label>
+                          <input
+                            type="text"
+                            value={screenDetails?.latitude || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, latitude: e.target.value} : null)}
+                            className={inputClasses}
+                            placeholder="Enter latitude"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Longitude</label>
+                          <input
+                            type="text"
+                            value={screenDetails?.longitude || ''}
+                            onChange={(e) => setScreenDetails(prev => prev ? {...prev, longitude: e.target.value} : null)}
+                            className={inputClasses}
+                            placeholder="Enter longitude"
                           />
                         </div>
 
