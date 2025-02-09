@@ -10,6 +10,14 @@ import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
+import 'jspdf-autotable';
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => void;
+  }
+}
 
 interface ScreenInfo {
   screenname: string;
@@ -119,11 +127,13 @@ export default function Reports() {
       if (!data || data.length === 0) throw new Error('No data found for the selected period');
 
       // Set report data
-      setReportData(data[0]);
+      const reportDataValue = data[0];
+      if (!reportDataValue) throw new Error('Report data not available');
+      setReportData(reportDataValue);
       setProgress(30);
       setProgressText('Preparing report layout...');
 
-      // Wait for next render cycle
+      // Wait for next render cycle and ensure reportData is set
       await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
       // Ensure report element exists
@@ -182,7 +192,6 @@ export default function Reports() {
 
       try {
         // Create PDF
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdf = new jsPDF({
           orientation: 'portrait',
           unit: 'mm',
@@ -191,43 +200,69 @@ export default function Reports() {
           putOnlyUsedFonts: true
         });
 
+        // Get header section only
+        const headerSection = reportRef.current?.querySelector('table:first-of-type');
+        if (!headerSection) throw new Error('Header section not found');
+
+        // Convert header section to image
+        const headerCanvas = await html2canvas(headerSection as HTMLElement, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+
+        // Add header image to PDF
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
         const margin = 10;
         const contentWidth = pdfWidth - (margin * 2);
-        const contentHeight = (canvas.height * contentWidth) / canvas.width;
-        
-        // Calculate number of pages needed
-        const pageHeight = pdfHeight - (margin * 2);
-        const totalPages = Math.ceil(contentHeight / pageHeight);
-        
-        // Add content to PDF page by page
-        let heightLeft = contentHeight;
-        let position = 0;
-        let page = 1;
-        
-        while (heightLeft > 0) {
-          // Add content to current page
-          pdf.addImage(
-            imgData,
-            'JPEG',
-            margin,
-            page === 1 ? margin : -position + margin,
-            contentWidth,
-            contentHeight,
-            undefined,
-            'FAST'
-          );
-          
-          heightLeft -= pageHeight;
-          position += pageHeight;
-          
-          // Add new page if there's more content
-          if (heightLeft > 0) {
-            pdf.addPage();
-            page++;
-          }
-        }
+        const headerHeight = (headerCanvas.height * contentWidth) / headerCanvas.width;
+        const headerImgData = headerCanvas.toDataURL('image/jpeg', 1.0);
+        pdf.addImage(headerImgData, 'JPEG', margin, margin, contentWidth, headerHeight);
+
+        // Prepare table data
+        const tableData = reportDataValue.screeninfo.map((screen: ScreenInfo) => [
+          screen.screenname,
+          screen.screenlocation,
+          screen.screentotalviews.toString()
+        ]);
+
+        // Add table using autoTable
+        pdf.autoTable({
+          startY: headerHeight + margin + 10,
+          head: [[
+            'Screen Name',
+            'Location',
+            'Total Views'
+          ]],
+          body: tableData,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [0, 0, 0],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          styles: {
+            fontSize: 10,
+            cellPadding: 5
+          },
+          columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 'auto', halign: 'right' }
+          },
+          didDrawPage: (pageInfo: any) => {
+            // Start table content from top margin on subsequent pages
+            if (pageInfo.pageNumber > 1) {
+              pageInfo.settings.startY = margin;
+            }
+          },
+          // Ensure table header is repeated on each page
+          showHead: 'everyPage',
+          // Maintain consistent margins
+          margin: { top: margin, right: margin, bottom: margin, left: margin }
+        });
 
         // Generate filename with timestamp
         const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
