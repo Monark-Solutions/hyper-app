@@ -191,7 +191,7 @@ export default function Dashboard() {
       {/* Recent Activity */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h2>
-        <div className="flex flex-wrap gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {recentActivities.map((activity, index) => {
             let Icon = RiMegaphoneLine;
             let bgColor = 'bg-blue-100';
@@ -208,7 +208,7 @@ export default function Dashboard() {
             }
 
             return (
-              <div key={index} className="flex items-center space-x-4 min-w-[300px] flex-1">
+              <div key={index} className="flex items-center space-x-4">
                 <div className={`flex-shrink-0 w-10 h-10 ${bgColor} rounded-full flex items-center justify-center`}>
                   <Icon className={`w-5 h-5 ${textColor}`} />
                 </div>
