@@ -243,7 +243,8 @@ export default function Screens(): React.ReactElement {
           .from('tags')
           .select('*')
           .eq('customerid', userDetails.customerId)
-          .eq('isdeleted', false),
+          .eq('isdeleted', false)
+          .order('tagname', { ascending: true }),
         supabase
           .rpc('get_screens', { 
             customer_id: userDetails.customerId,
