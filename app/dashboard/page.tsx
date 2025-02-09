@@ -165,7 +165,7 @@ export default function Dashboard() {
           <p className="mt-4 text-3xl font-semibold text-gray-900">{dashboardData.files_uploaded}</p>
           <div className="mt-2 flex items-center text-sm text-blue-600">
             <RiUploadCloud2Line className="w-4 h-4 mr-1" />
-            <span>{dashboardData.storage_used_gb.toFixed(2)} GB used</span>
+            <span>{(dashboardData.storage_used_gb ?? 0).toFixed(2)} GB used</span>
           </div>
         </div>
 
@@ -176,7 +176,7 @@ export default function Dashboard() {
               <RiEyeLine className="w-6 h-6 text-green-600" />
             </div>
           </div>
-          <p className="mt-4 text-3xl font-semibold text-gray-900">{(dashboardData.total_views_current_month / 1000).toFixed(2)}K</p>
+          <p className="mt-4 text-3xl font-semibold text-gray-900">{((dashboardData.total_views_current_month ?? 0) / 1000).toFixed(2)}K</p>
           <div className="mt-2 flex items-center text-sm text-green-600">
             {dashboardData.views_trend === 'Up' ? (
               <RiArrowUpLine className="w-4 h-4 mr-1 text-green-600" />

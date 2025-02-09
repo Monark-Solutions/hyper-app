@@ -91,7 +91,8 @@ export default function Reports() {
   const reportRef = useRef<HTMLDivElement>(null);
 
   const formatDate = (date: string) => {
-    return dayjs(date).format('DD-MM-YYYY');
+    const formatted = dayjs(date).format('DD-MM-YYYY');
+    return formatted.toLowerCase();
   };
 
   const handleGenerateReport = async (e: React.FormEvent) => {
@@ -117,20 +118,23 @@ export default function Reports() {
       if (rpcError) throw new Error(rpcError.message);
       if (!data || data.length === 0) throw new Error('No data found for the selected period');
 
+      // Set report data
       setReportData(data[0]);
       setProgress(30);
-      setProgressText('Generating report...');
+      setProgressText('Preparing report layout...');
 
-      // Generate PDF
-      if (!reportRef.current) return;
+      // Wait for next render cycle
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
-      setProgress(60);
-      setProgressText('Generating PDF...');
+      // Ensure report element exists
+      if (!reportRef.current) {
+        throw new Error('Report layout not ready');
+      }
 
-      // Prepare for PDF generation
-      setProgressText('Preparing PDF...');
+      setProgress(40);
+      setProgressText('Loading campaign image...');
 
-      // Create a temporary image to ensure it's loaded
+      // Pre-load image
       const tempImg = document.createElement('img');
       await new Promise<void>((resolve, reject) => {
         tempImg.onload = () => resolve();
@@ -138,13 +142,12 @@ export default function Reports() {
         tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
       });
 
-      // Wait for DOM updates
-      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      setProgress(50);
+      setProgressText('Preparing PDF generation...');
 
       // Apply styles for PDF generation
       const style = document.createElement('style');
       style.innerHTML = `
-        .text-blue-800 { color: rgb(30, 64, 175) !important; }
         th {
           background-color: #000000 !important;
           color: #ffffff !important;
@@ -158,7 +161,7 @@ export default function Reports() {
       `;
       document.head.appendChild(style);
 
-      // Generate canvas with better quality
+      // Generate high-quality canvas
       const canvas = await html2canvas(reportRef.current, {
         scale: 3,
         useCORS: true,
@@ -174,10 +177,11 @@ export default function Reports() {
         }
       });
 
-      setProgressText('Generating PDF...');
+      setProgress(70);
+      setProgressText('Converting to PDF format...');
 
       try {
-        // Create PDF with high quality
+        // Create PDF
         const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdf = new jsPDF({
           orientation: 'portrait',
@@ -188,35 +192,67 @@ export default function Reports() {
         });
 
         const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
         const margin = 10;
         const contentWidth = pdfWidth - (margin * 2);
         const contentHeight = (canvas.height * contentWidth) / canvas.width;
-
-        // Add image to PDF with better quality
-        pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, contentHeight, undefined, 'FAST');
+        
+        // Calculate number of pages needed
+        const pageHeight = pdfHeight - (margin * 2);
+        const totalPages = Math.ceil(contentHeight / pageHeight);
+        
+        // Add content to PDF page by page
+        let heightLeft = contentHeight;
+        let position = 0;
+        let page = 1;
+        
+        while (heightLeft > 0) {
+          // Add content to current page
+          pdf.addImage(
+            imgData,
+            'JPEG',
+            margin,
+            page === 1 ? margin : -position + margin,
+            contentWidth,
+            contentHeight,
+            undefined,
+            'FAST'
+          );
+          
+          heightLeft -= pageHeight;
+          position += pageHeight;
+          
+          // Add new page if there's more content
+          if (heightLeft > 0) {
+            pdf.addPage();
+            page++;
+          }
+        }
 
         // Generate filename with timestamp
         const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
         const fileName = `campaign-report-${timestamp}.pdf`;
 
-        // Save PDF directly
-        pdf.save(fileName);
+        setProgress(90);
+        setProgressText('Finalizing report...');
 
-        // Clean up
+        // Save PDF and clean up
+        pdf.save(fileName);
         document.head.removeChild(style);
+
+        setProgress(100);
+        setProgressText('Report downloaded successfully!');
+
+        // Show success message
+        Swal.fire({
+          title: 'Success!',
+          text: 'Report has been generated and downloaded',
+          icon: 'success'
+        });
       } catch (pdfError) {
         console.error('PDF generation error:', pdfError);
         throw new Error('Failed to generate PDF');
       }
-
-      setProgress(100);
-      setProgressText('Report generated successfully!');
-
-      Swal.fire({
-        title: 'Success!',
-        text: 'Report has been generated and downloaded',
-        icon: 'success'
-      });
 
     } catch (err: any) {
       setError(err.message || 'Failed to generate report');
@@ -234,70 +270,91 @@ export default function Reports() {
   };
 
   const ReportPreview = ({ data }: { data: ReportData }) => (
-    <div ref={reportRef} className="mt-6 p-10 border rounded-lg bg-white print:p-0 print:border-0">
-      <div className="mb-12">
-        <span className="text-6xl font-black text-blue-800 tracking-wider">HYPER</span>
-      </div>
-      
-      <div className="flex items-start">
-        {/* Left side content */}
-        <div className="flex-1 pr-8">
-          <h2 className="text-5xl font-bold mb-10">{data.campaignname}</h2>
-          <div className="mb-10">
-            <p className="text-gray-700 mb-2">Campaign Dates</p>
-            <p className="font-medium">{formatDate(data.startdate)} - {formatDate(data.enddate)}</p>
-          </div>
-          
-          <div>
-            <p className="text-2xl font-bold text-gray-700 mb-3">No. of Sites</p>
-            <p className="text-2xl text-gray-600">{data.totalsites}</p>
-          </div>
-        </div>
-        
-        {/* Right side content */}
-        <div className="w-[450px]">
-          <div className="relative w-full h-[250px]">
-            <Image
-              src={`data:image/jpeg;base64,${data.thumbnail}`}
-              alt="Campaign Thumbnail"
-              fill
-              style={{ objectFit: 'contain' }}
-              priority
-              className="rounded-lg"
-            />
-          </div>
-          <div className="mt-8">
-            <p className="text-2xl font-bold text-gray-700 mb-3">Total Views</p>
-            <p className="text-2xl text-gray-600">{data.totalviews}</p>
-          </div>
-        </div>
-      </div>
+    <div ref={reportRef} className="mt-6 p-10 bg-white print:p-0">
+      <table className="w-full border-collapse">
+        <tbody>
+          <tr>
+            <td className="align-top w-1/2">
+              <span className="text-6xl font-black text-black tracking-wider">HYPER</span>
+            </td>
+            <td rowSpan={2} className="align-top w-1/2">
+              <div className="w-[450px]">
+                <div className="relative w-full h-[150px]">
+                  <Image
+                    src={`data:image/jpeg;base64,${data.thumbnail}`}
+                    alt="Campaign Thumbnail"
+                    fill
+                    style={{ objectFit: 'contain' }}
+                    priority
+                    className="rounded-lg"
+                  />
+                </div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td className="text-5xl font-bold pt-4">{data.campaignname}</td>
+          </tr>
+          <tr>
+            <td className="pt-6">
+              <p className="text-2xl font-bold text-gray-700">Campaign Dates</p>
+            </td>
+            <td className="pt-6">
+              <p className="text-2xl font-bold text-gray-700">Report Dates</p>
+            </td>
+          </tr>
+          <tr>
+            <td className="pt-3">
+              <p className="text-2xl text-gray-600">{formatDate(data.startdate)} - {formatDate(data.enddate)}</p>
+            </td>
+            <td className="pt-3">
+              <p className="text-2xl text-gray-600">{formatDate(startDate)} - {formatDate(endDate)}</p>
+            </td>
+          </tr>
+          <tr>
+            <td className="pt-6">
+              <p className="text-2xl font-bold text-gray-700">No. of Sites</p>
+            </td>
+            <td className="pt-6">
+              <p className="text-2xl font-bold text-gray-700">Total Views</p>
+            </td>
+          </tr>
+          <tr>
+            <td className="pt-3">
+              <p className="text-2xl text-gray-600">{data.totalsites}</p>
+            </td>
+            <td className="pt-3">
+              <p className="text-2xl text-gray-600">{data.totalviews}</p>
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div className="mt-24 print:mt-20">
-        <table className="min-w-full divide-y divide-gray-200 print:divide-y-2">
+      <div className="mt-8">
+        <table className="min-w-full">
           <thead>
             <tr>
-              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
+              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
                 Screen Name
               </th>
-              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
+              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
                 Location
               </th>
-              <th className="px-6 py-4 bg-black text-right text-sm font-semibold text-white uppercase tracking-wider print:bg-black print:text-white">
+              <th className="px-6 py-4 bg-black text-right text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
                 Total Views
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {data.screeninfo.map((screen, index) => (
               <tr key={index}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                <td className="px-6 py-4 text-sm font-medium text-gray-900 border border-gray-200">
                   {screen.screenname}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 text-sm text-gray-500 border border-gray-200">
                   {screen.screenlocation}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">
+                <td className="px-6 py-4 text-sm text-right text-gray-900 border border-gray-200">
                   {screen.screentotalviews}
                 </td>
               </tr>
