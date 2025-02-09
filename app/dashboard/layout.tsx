@@ -27,8 +27,16 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState('/dashboard');
   const [isProfileDrawerOpen, setIsProfileDrawerOpen] = useState(false);
+  const [isManagingUser, setIsManagingUser] = useState(false);
+  const [isAddingNewUser, setIsAddingNewUser] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [profileData, setProfileData] = useState<{
+    username: string;
+    useremail: string;
+    userrole: number;
+    isactive: boolean;
+  } | null>(null);
+  const [managedUser, setManagedUser] = useState<{
     username: string;
     useremail: string;
     userrole: number;
@@ -43,7 +51,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const fetchUserProfile = useCallback(async () => {
+  const fetchUserProfile = useCallback(async (username?: string) => {
     try {
       setIsLoading(true);
       const { data, error } = await supabase
@@ -57,18 +65,24 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
             customerid
           )
         `)
-        .eq('username', user.username)
+        .eq('username', username || user?.username)
         .eq('customers.customerid', user.customerId)
         .single();
 
       if (error) throw error;
       
-      setProfileData({
+      const profileInfo = {
         username: data.username,
         useremail: data.useremail || '',
         userrole: data.userrole || 0,
         isactive: data.isactive || false
-      });
+      };
+
+      if (isManagingUser) {
+        setManagedUser(profileInfo);
+      } else {
+        setProfileData(profileInfo);
+      }
     } catch (error) {
       console.error('Error fetching user profile:', error);
       setError('Failed to fetch user profile');
@@ -86,27 +100,117 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
     setUser(JSON.parse(userDetails));
   }, [router]);
 
-  const handleProfileUpdate = async (e: React.FormEvent) => {
+  // Event listener for user management
+  useEffect(() => {
+    const handleManageUser = (e: CustomEvent) => {
+      if (e.detail) {
+        setIsManagingUser(true);
+        setIsProfileDrawerOpen(true);
+        if (e.detail.user) {
+          setIsAddingNewUser(false);
+          setManagedUser(e.detail.user);
+          fetchUserProfile(e.detail.user.username);
+        } else {
+          setIsAddingNewUser(true);
+          setManagedUser({
+            username: '',
+            useremail: '',
+            userrole: 1,
+            isactive: true
+          });
+        }
+      }
+    };
+
+    window.addEventListener('manageUser', handleManageUser as EventListener);
+    return () => window.removeEventListener('manageUser', handleManageUser as EventListener);
+  }, [fetchUserProfile]);
+
+  const handleProfileUpdate = async (e: React.FormEvent, isNewUser: boolean = false) => {
     e.preventDefault();
     if (!user?.username || !profileData) return;
 
     try {
       setIsLoading(true);
       setError(null);
-      
-      const { error } = await supabase
-        .from('users')
-        .update({
-          useremail: profileData.useremail,
-          userrole: profileData.userrole,
-          isactive: profileData.isactive
-        })
-        .eq('username', user.username);
 
-      if (error) throw error;
+      // Validate password for new users
+      if (isNewUser) {
+        if (!passwordData.newPassword || !passwordData.confirmPassword) {
+          throw new Error('Password is required for new users');
+        }
+        if (passwordData.newPassword !== passwordData.confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
+        if (passwordData.newPassword.length < 6) {
+          throw new Error('Password must be at least 6 characters long');
+        }
+      }
       
-      setSuccess('Profile updated successfully');
-      setTimeout(() => setSuccess(null), 3000);
+      if (isManagingUser) {
+        const userData = {
+          useremail: managedUser!.useremail,
+          userrole: managedUser!.userrole,
+          isactive: managedUser!.isactive
+        };
+
+        if (isNewUser) {
+          // Hash password for new user
+          const hashedPassword = await hashPassword(passwordData.newPassword);
+
+          // Add new user
+          const { error } = await supabase
+            .from('users')
+            .insert([{
+              ...userData,
+              username: managedUser!.username,
+              customerid: user?.customerId,
+              isdeleted: false,
+              password: hashedPassword
+            }]);
+          if (error) throw error;
+
+          // Clear password data
+          setPasswordData({
+            currentPassword: '',
+            newPassword: '',
+            confirmPassword: ''
+          });
+        } else {
+          // Update existing user
+          const { error } = await supabase
+            .from('users')
+            .update(userData)
+            .eq('username', managedUser!.username);
+          if (error) throw error;
+        }
+
+        // Emit a custom event to refresh users list
+        window.dispatchEvent(new CustomEvent('refreshUsers'));
+      } else {
+        // Update current user's profile
+        const { error } = await supabase
+          .from('users')
+          .update({
+            useremail: profileData!.useremail,
+            userrole: profileData!.userrole,
+            isactive: profileData!.isactive
+          })
+          .eq('username', user!.username);
+        if (error) throw error;
+      }
+
+      const successMessage = isNewUser ? 'User created successfully' : 'Profile updated successfully';
+      setSuccess(successMessage);
+      setTimeout(() => {
+        setSuccess(null);
+        if (isManagingUser) {
+          setIsProfileDrawerOpen(false);
+          setManagedUser(null);
+          setIsManagingUser(false);
+          setIsAddingNewUser(false);
+        }
+      }, 3000);
     } catch (error: any) {
       setError(error.message || 'Failed to update profile');
     } finally {
@@ -257,7 +361,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                   }`}
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                 >
-                  <span>Welcome {user.name}</span>
+                  <span>Welcome {user.username}</span>
                   <RiUserLine className="w-5 h-5" />
                   <RiArrowDownSLine className={`w-5 h-5 transition-transform duration-200 ${
                     isDropdownOpen ? 'transform rotate-180' : ''
@@ -332,7 +436,11 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         className={`fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity z-50 ${
           isProfileDrawerOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
-        onClick={() => setIsProfileDrawerOpen(false)}
+        onClick={() => {
+          setIsProfileDrawerOpen(false);
+          setIsManagingUser(false);
+          setIsAddingNewUser(false);
+        }}
       >
         <div
           className={`fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl transition-transform duration-300 ease-in-out ${
@@ -343,9 +451,15 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="flex h-full flex-col">
             {/* Drawer Header */}
             <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h2 className="text-xl font-semibold text-gray-900">Profile Settings</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {isManagingUser ? (isAddingNewUser ? 'Add New User' : 'Edit User') : 'Profile Settings'}
+              </h2>
               <button
-                onClick={() => setIsProfileDrawerOpen(false)}
+                onClick={() => {
+                  setIsProfileDrawerOpen(false);
+                  setIsManagingUser(false);
+                  setIsAddingNewUser(false);
+                }}
                 className="rounded-md p-2 text-gray-400 hover:text-gray-500 hover:bg-gray-100"
               >
                 <RiCloseLine className="h-6 w-6" />
@@ -361,7 +475,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               ) : (
                 <>
                   {/* Profile Form */}
-                  <form className="space-y-6" onSubmit={handleProfileUpdate}>
+                  <form className="space-y-6" onSubmit={(e) => handleProfileUpdate(e, isAddingNewUser)}>
                     <div>
                       <label htmlFor="username" className="block text-sm font-medium text-gray-700">
                         Username
@@ -370,9 +484,16 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                         type="text"
                         id="username"
                         name="username"
-                        value={profileData?.username || ''}
-                        disabled
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm bg-gray-50"
+                        value={(isManagingUser ? managedUser : profileData)?.username || ''}
+                        onChange={(e) => {
+                          if (isManagingUser && isAddingNewUser) {
+                            setManagedUser(prev => ({ ...prev!, username: e.target.value }));
+                          }
+                        }}
+                        disabled={!isManagingUser || !isAddingNewUser}
+                        className={`mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm ${
+                          isManagingUser && isAddingNewUser ? 'focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500' : 'bg-gray-50'
+                        }`}
                       />
                     </div>
 
@@ -384,8 +505,14 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                         type="email"
                         id="useremail"
                         name="useremail"
-                        value={profileData?.useremail || ''}
-                        onChange={(e) => setProfileData(prev => ({ ...prev!, useremail: e.target.value }))}
+                        value={(isManagingUser ? managedUser : profileData)?.useremail || ''}
+                        onChange={(e) => {
+                          if (isManagingUser) {
+                            setManagedUser(prev => ({ ...prev!, useremail: e.target.value }));
+                          } else {
+                            setProfileData(prev => ({ ...prev!, useremail: e.target.value }));
+                          }
+                        }}
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
@@ -397,8 +524,14 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                       <select
                         id="userrole"
                         name="userrole"
-                        value={profileData?.userrole || 0}
-                        onChange={(e) => setProfileData(prev => ({ ...prev!, userrole: Number(e.target.value) }))}
+                        value={(isManagingUser ? managedUser : profileData)?.userrole || 0}
+                        onChange={(e) => {
+                          if (isManagingUser) {
+                            setManagedUser(prev => ({ ...prev!, userrole: Number(e.target.value) }));
+                          } else {
+                            setProfileData(prev => ({ ...prev!, userrole: Number(e.target.value) }));
+                          }
+                        }}
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       >
                         <option value={0}>Administrator</option>
@@ -411,8 +544,14 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                         type="checkbox"
                         id="isactive"
                         name="isactive"
-                        checked={profileData?.isactive || false}
-                        onChange={(e) => setProfileData(prev => ({ ...prev!, isactive: e.target.checked }))}
+                        checked={(isManagingUser ? managedUser : profileData)?.isactive || false}
+                        onChange={(e) => {
+                          if (isManagingUser) {
+                            setManagedUser(prev => ({ ...prev!, isactive: e.target.checked }));
+                          } else {
+                            setProfileData(prev => ({ ...prev!, isactive: e.target.checked }));
+                          }
+                        }}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <label htmlFor="isactive" className="ml-2 block text-sm text-gray-700">
@@ -425,82 +564,122 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                         type="submit"
                         className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                       >
-                        Update Profile
+                        {isManagingUser 
+                          ? (isAddingNewUser ? 'Create User' : 'Update User')
+                          : 'Update Profile'
+                        }
                       </button>
                     </div>
                   </form>
 
-                  {/* Password Change Section */}
+                  {/* Password Section */}
                   <div className="mt-8 pt-8 border-t border-gray-200">
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="show-password-form"
-                        checked={showPasswordForm}
-                        onChange={(e) => setShowPasswordForm(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <label htmlFor="show-password-form" className="ml-2 text-lg font-medium text-gray-900">
-                        Change Password
-                      </label>
-                    </div>
-                    <form className={`mt-4 space-y-6 ${showPasswordForm ? 'block' : 'hidden'}`} onSubmit={handlePasswordChange}>
-                      <div>
-                        <label htmlFor="current-password" className="block text-sm font-medium text-gray-700">
-                          Current Password
-                        </label>
-                        <input
-                          type="password"
-                          id="current-password"
-                          name="current-password"
-                          value={passwordData.currentPassword}
-                          onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          required
-                        />
+                    {isManagingUser && isAddingNewUser ? (
+                      // New User Password Form
+                      <div className="space-y-6">
+                        <h3 className="text-lg font-medium text-gray-900">Set Password</h3>
+                        <div>
+                          <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            id="new-password"
+                            name="new-password"
+                            value={passwordData.newPassword}
+                            onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            required
+                            minLength={6}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
+                            Confirm Password
+                          </label>
+                          <input
+                            type="password"
+                            id="confirm-password"
+                            name="confirm-password"
+                            value={passwordData.confirmPassword}
+                            onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            required
+                            minLength={6}
+                          />
+                        </div>
                       </div>
-
-                      <div>
-                        <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
-                          New Password
-                        </label>
-                        <input
-                          type="password"
-                          id="new-password"
-                          name="new-password"
-                          value={passwordData.newPassword}
-                          onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          required
-                          minLength={6}
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
-                          Confirm New Password
-                        </label>
-                        <input
-                          type="password"
-                          id="confirm-password"
-                          name="confirm-password"
-                          value={passwordData.confirmPassword}
-                          onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          required
-                          minLength={6}
-                        />
-                      </div>
-
-                      <div>
-                        <button
-                          type="submit"
-                          className="w-full rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-                        >
-                          Change Password
-                        </button>
-                      </div>
-                    </form>
+                    ) : (
+                      // Change Password Form for Existing Users
+                      <>
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            id="show-password-form"
+                            checked={showPasswordForm}
+                            onChange={(e) => setShowPasswordForm(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <label htmlFor="show-password-form" className="ml-2 text-lg font-medium text-gray-900">
+                            Change Password
+                          </label>
+                        </div>
+                        <form className={`mt-4 space-y-6 ${showPasswordForm ? 'block' : 'hidden'}`} onSubmit={handlePasswordChange}>
+                          <div>
+                            <label htmlFor="current-password" className="block text-sm font-medium text-gray-700">
+                              Current Password
+                            </label>
+                            <input
+                              type="password"
+                              id="current-password"
+                              name="current-password"
+                              value={passwordData.currentPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
+                              New Password
+                            </label>
+                            <input
+                              type="password"
+                              id="new-password"
+                              name="new-password"
+                              value={passwordData.newPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              required
+                              minLength={6}
+                            />
+                          </div>
+                          <div>
+                            <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
+                              Confirm New Password
+                            </label>
+                            <input
+                              type="password"
+                              id="confirm-password"
+                              name="confirm-password"
+                              value={passwordData.confirmPassword}
+                              onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              required
+                              minLength={6}
+                            />
+                          </div>
+                          <div>
+                            <button
+                              type="submit"
+                              className="w-full rounded-md bg-gray-800 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                            >
+                              Change Password
+                            </button>
+                          </div>
+                        </form>
+                      </>
+                    )}
                   </div>
                 </>
               )}

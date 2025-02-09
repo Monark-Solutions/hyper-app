@@ -88,7 +88,7 @@ export default function Home() {
 
         await Swal.fire({
           title: 'Login Successful!',
-          text: `Welcome back, ${validUser.customers.contactname}!`,
+          text: `Welcome back, ${validUser.username}!`,
           icon: 'success',
           confirmButtonText: 'OK'
         });

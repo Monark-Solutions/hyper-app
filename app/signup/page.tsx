@@ -50,7 +50,8 @@ export default function SignUp() {
           {
             username: formData.username,
             password: hashedPassword,
-            customerid: customerData.customerid
+            customerid: customerData.customerid,
+            useremail: formData.contactEmail
           }
         ]);
 

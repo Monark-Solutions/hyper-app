@@ -114,7 +114,7 @@ export default function Dashboard() {
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 text-white">
         <h1 className="text-3xl font-bold">
-          Welcome back, {userDetails.name}!
+          Welcome back, {userDetails.username}!
         </h1>
         <p className="mt-2 text-blue-100">
           Here's an overview of your digital signage operations.
