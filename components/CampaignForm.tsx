@@ -814,7 +814,7 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={searchTags.length === 0 ? "Search screens..." : ""}
+                    placeholder={searchTags.length === 0 ? "Search screens by name, location or tag. Type term and press enter to search." : ""}
                     className="flex-1 min-w-[120px] outline-none text-sm"
                   />
                 </div>

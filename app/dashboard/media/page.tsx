@@ -817,7 +817,7 @@ export default function Media() {
                   filterMediaItems(selectedMediaType, newTerms);
                 }
               }}
-              placeholder={searchTerms.length === 0 ? "Search media..." : ""}
+              placeholder={searchTerms.length === 0 ? "Search media by name, type, size or tag. Type term and press enter to search." : ""}
               className="flex-1 min-w-[150px] outline-none border-none focus:ring-0"
             />
           </div>
@@ -864,12 +864,12 @@ export default function Media() {
               setSelectedPropertyTags(mediaTags);
             }}
           >
-            <div className="aspect-w-16 aspect-h-9 bg-gray-100 flex items-center justify-center">
+            <div className="h-[160px] bg-gray-100 flex items-center justify-center overflow-hidden">
               {item.thumbnail ? (
                 <img 
                   src={`data:image/jpeg;base64,${item.thumbnail}`}
                   alt={item.medianame} 
-                  className="object-cover w-full h-full" 
+                  className="object-cover w-full h-full"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
@@ -1095,9 +1095,9 @@ export default function Media() {
                                 <p className="text-sm text-gray-500 mt-1">{campaign.state} • {campaign.timeText}</p>
                               </div>
                               <div className="flex items-center space-x-2">
-                                <button className="text-gray-600 hover:text-gray-800">
+                                {/* <button className="text-gray-600 hover:text-gray-800">
                                   <BiBarChart size={20} />
-                                </button>
+                                </button> */}
                                 {(campaign.state === 'Active' || campaign.state === 'Scheduled' || campaign.state === 'Completed') && (
                                   <button 
                                     className="text-gray-600 hover:text-gray-800"

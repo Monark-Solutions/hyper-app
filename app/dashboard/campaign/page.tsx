@@ -565,7 +565,7 @@ export default function Campaign() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={searchTags.length === 0 ? "Search campaigns..." : ""}
+              placeholder={searchTags.length === 0 ? "Search campaigns. Type term and press enter to search." : ""}
               className="flex-1 outline-none bg-transparent min-w-[120px] border-none focus:ring-0"
             />
           </div>
@@ -617,6 +617,7 @@ export default function Campaign() {
                 <div>
                   <h3 className="font-medium text-gray-900">{campaign.campaignname}</h3>
                   <p className="text-sm text-gray-500 mt-1">{campaign.state} • {campaign.timeText}</p>
+                  <p className="text-sm text-gray-500 mt-1 bold">{dayjs(campaign.startdate).format('DD-MM-YYYY')} - {dayjs(campaign.enddate).format('DD-MM-YYYY')}</p>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="relative group">
