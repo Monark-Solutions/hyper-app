@@ -3,15 +3,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Campaign } from '@/types/campaign';
+import { ReportData, ScreenInfo } from '@/types/report';
 import supabase from '@/lib/supabase';
 import LoadingOverlay from 'react-loading-overlay-ts';
-import Image from 'next/image';
 import Swal from 'sweetalert2';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
 import 'jspdf-autotable';
 import Select, { SingleValue } from 'react-select';
+import ReportPreview from '@/components/ReportPreview';
 
 interface SelectOption {
   value: string;
@@ -23,22 +24,6 @@ declare module 'jspdf' {
   interface jsPDF {
     autoTable: (options: any) => void;
   }
-}
-
-interface ScreenInfo {
-  screenname: string;
-  screenlocation: string;
-  screentotalviews: number;
-}
-
-interface ReportData {
-  campaignname: string;
-  startdate: string;
-  enddate: string;
-  totalsites: number;
-  totalviews: number;
-  thumbnail: string;
-  screeninfo: ScreenInfo[];
 }
 
 export default function Reports() {
@@ -311,101 +296,6 @@ export default function Reports() {
     }
   };
 
-  const ReportPreview = ({ data }: { data: ReportData }) => (
-    <div ref={reportRef} className="mt-6 p-10 bg-white print:p-0">
-      <table className="w-full border-collapse">
-        <tbody>
-          <tr>
-            <td className="align-top w-1/2">
-              <span className="text-6xl font-black text-black tracking-wider">HYPER</span>
-            </td>
-            <td rowSpan={2} className="align-top w-1/2">
-              <div className="w-[450px]">
-                <div className="relative w-full h-[150px]">
-                  <Image
-                    src={`data:image/jpeg;base64,${data.thumbnail}`}
-                    alt="Campaign Thumbnail"
-                    fill
-                    style={{ objectFit: 'contain' }}
-                    priority
-                    className="rounded-lg"
-                  />
-                </div>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td className="text-5xl font-bold pt-4">{data.campaignname}</td>
-          </tr>
-          <tr>
-            <td className="pt-6">
-              <p className="text-2xl font-bold text-gray-700">Campaign Dates</p>
-            </td>
-            <td className="pt-6">
-              <p className="text-2xl font-bold text-gray-700">Report Dates</p>
-            </td>
-          </tr>
-          <tr>
-            <td className="pt-3">
-              <p className="text-2xl text-gray-600">{formatDate(data.startdate)} - {formatDate(data.enddate)}</p>
-            </td>
-            <td className="pt-3">
-              <p className="text-2xl text-gray-600">{formatDate(startDate)} - {formatDate(endDate)}</p>
-            </td>
-          </tr>
-          <tr>
-            <td className="pt-6">
-              <p className="text-2xl font-bold text-gray-700">No. of Sites</p>
-            </td>
-            <td className="pt-6">
-              <p className="text-2xl font-bold text-gray-700">Total Views</p>
-            </td>
-          </tr>
-          <tr>
-            <td className="pt-3">
-              <p className="text-2xl text-gray-600">{data.totalsites}</p>
-            </td>
-            <td className="pt-3">
-              <p className="text-2xl text-gray-600">{data.totalviews}</p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div className="mt-8">
-        <table className="min-w-full">
-          <thead>
-            <tr>
-              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
-                Screen Name
-              </th>
-              <th className="px-6 py-4 bg-black text-left text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
-                Location
-              </th>
-              <th className="px-6 py-4 bg-black text-right text-sm font-semibold text-white uppercase tracking-wider border border-gray-200">
-                Total Views
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.screeninfo.map((screen, index) => (
-              <tr key={index}>
-                <td className="px-6 py-4 text-sm font-medium text-gray-900 border border-gray-200">
-                  {screen.screenname}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500 border border-gray-200">
-                  {screen.screenlocation}
-                </td>
-                <td className="px-6 py-4 text-sm text-right text-gray-900 border border-gray-200">
-                  {screen.screentotalviews}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 
   return (
     <LoadingOverlay
@@ -534,7 +424,14 @@ export default function Reports() {
           </div>
         </div>
 
-        {reportData && <ReportPreview data={reportData} />}
+        {reportData && (
+          <ReportPreview
+            ref={reportRef}
+            data={reportData}
+            startDate={startDate}
+            endDate={endDate}
+          />
+        )}
       </div>
     </LoadingOverlay>
   );
