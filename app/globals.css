@@ -19,6 +19,15 @@ body {
   background: var(--background);
   font-family: SFProDisplayRegular, Arial, Helvetica, sans-serif;
 }
-/* .text-blue-600{
+.text-blue-600{
 color: #0a0a0a;
-} */
+}
+.bg-blue-600{
+  background-color: #0a0a0a;
+}
+.from-blue-600{
+  --tw-gradient-from: #252525;
+}
+.to-blue-700{
+  --tw-gradient-to: #515151;
+}
