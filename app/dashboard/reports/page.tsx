@@ -11,7 +11,12 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import dayjs from 'dayjs';
 import 'jspdf-autotable';
-import Select from 'react-select';
+import Select, { SingleValue } from 'react-select';
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
 
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
@@ -441,20 +446,28 @@ export default function Reports() {
                 <label htmlFor="campaign" className="block text-sm font-medium text-gray-700">
                   Select Campaign
                 </label>
-                <select
-                  id="campaign"
-                  value={selectedCampaign}
-                  onChange={(e) => setSelectedCampaign(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
-                  disabled={isLoading}
-                >
-                  <option value="">Choose a campaign</option>
-                  {campaigns.map((campaign) => (
-                    <option key={campaign.campaignid} value={campaign.campaignid}>
-                      {campaign.campaignname}
-                    </option>
-                  ))}
-                </select>
+              <Select<SelectOption>
+                id="campaign"
+                value={selectedCampaign ? { value: selectedCampaign, label: campaigns.find(c => String(c.campaignid) === selectedCampaign)?.campaignname || '' } : null}
+                onChange={(newValue: SingleValue<SelectOption>) => setSelectedCampaign(newValue?.value || '')}
+                options={campaigns.map(campaign => ({
+                  value: String(campaign.campaignid),
+                  label: campaign.campaignname || ''
+                }))}
+                isDisabled={isLoading}
+                isClearable={true}
+                isSearchable={true}
+                placeholder="Choose a campaign"
+                className="mt-1"
+                classNames={{
+                  control: (state) => 
+                    `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                  input: () => "!text-sm",
+                  option: () => "!text-sm",
+                  placeholder: () => "!text-sm !text-slate-400",
+                  singleValue: () => "!text-sm"
+                }}
+              />
               </div>
 
               {/* Date Range */}
