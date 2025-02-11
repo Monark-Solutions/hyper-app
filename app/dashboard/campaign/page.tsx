@@ -619,41 +619,61 @@ export default function Campaign() {
                   <p className="text-sm text-gray-500 mt-1">{campaign.state} • {campaign.timeText}</p>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button 
-                    className="text-gray-600 hover:text-gray-800"
-                    onClick={() => {
-                      setSelectedCampaignForReport(campaign);
-                      setIsReportDrawerOpen(true);
-                    }}
-                  >
-                    <BiBarChart size={20} />
-                  </button>
-                  {(campaign.state === 'Active' || campaign.state === 'Scheduled' || campaign.state === 'Completed') && (
+                  <div className="relative group">
                     <button 
                       className="text-gray-600 hover:text-gray-800"
                       onClick={() => {
-                        setEditCampaignId(campaign.campaignid);
-                        setIsDrawerOpen(true);
+                        setSelectedCampaignForReport(campaign);
+                        setIsReportDrawerOpen(true);
                       }}
                     >
-                      <BiEdit size={20} />
+                      <BiBarChart size={20} />
                     </button>
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-2.5 py-1.5 bg-black text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                      Report
+                    </div>
+                  </div>
+                  {(campaign.state === 'Active' || campaign.state === 'Scheduled' || campaign.state === 'Completed') && (
+                    <div className="relative group">
+                      <button 
+                        className="text-gray-600 hover:text-gray-800"
+                        onClick={() => {
+                          setEditCampaignId(campaign.campaignid);
+                          setIsDrawerOpen(true);
+                        }}
+                      >
+                        <BiEdit size={20} />
+                      </button>
+                      <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-2.5 py-1.5 bg-black text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                        Edit
+                      </div>
+                    </div>
                   )}
                   {campaign.state === 'Active' && (
                     (campaign.playstate === null || campaign.playstate === true) ? (
-                      <button 
-                        className="text-gray-600 hover:text-gray-800"
-                        onClick={() => handlePlayStateUpdate(campaign.campaignid, false)}
-                      >
-                        <BiPause size={20} />
-                      </button>
+                      <div className="relative group">
+                        <button 
+                          className="text-gray-600 hover:text-gray-800"
+                          onClick={() => handlePlayStateUpdate(campaign.campaignid, false)}
+                        >
+                          <BiPause size={20} />
+                        </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-2.5 py-1.5 bg-black text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                          Pause Campaign
+                        </div>
+                      </div>
                     ) : (
-                      <button 
-                        className="text-gray-600 hover:text-gray-800"
-                        onClick={() => handlePlayStateUpdate(campaign.campaignid, true)}
-                      >
-                        <BiPlay size={20} />
-                      </button>
+                      <div className="relative group">
+                        <button 
+                          className="text-gray-600 hover:text-gray-800"
+                          onClick={() => handlePlayStateUpdate(campaign.campaignid, true)}
+                        >
+                          <BiPlay size={20} />
+                        </button>
+                        <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-2.5 py-1.5 bg-black text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                          Resume Campaign
+                        </div>
+                      </div>
                     )
                   )}
                 </div>
