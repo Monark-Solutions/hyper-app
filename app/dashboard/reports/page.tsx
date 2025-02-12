@@ -485,19 +485,12 @@ export default function Reports() {
           startY: screenHeaderHeight + screenMargin + 10,
           head: [
             [
-              { content: 'Screen Name', rowSpan: 2 },
-              { content: 'Location', rowSpan: 2 },
-              { content: 'Start Time', rowSpan: 2 },
-              { content: 'End Time', rowSpan: 2 },
-              { content: 'Screen Time', colSpan: 2 },
-              { content: 'Performance %', rowSpan: 2 }
-            ],
-            [
-              '',
-              '',
-              '',
-              '',
-              'Expected',
+              'Screen Name',
+              'Location',
+              'Start Time',
+              'End Time',
+              'Screen Time(Expected)',
+              'Screen Time(Average)',
               'Average'
             ]
           ],
