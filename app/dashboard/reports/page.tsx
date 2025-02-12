@@ -66,22 +66,30 @@ export default function Reports() {
   const [selectedScreen, setSelectedScreen] = useState<string>('');
   const [screenActivityData, setScreenActivityData] = useState<any[]>([]);
   const [screens, setScreens] = useState<any[]>([]);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const userDetailsStr = localStorage.getItem('userDetails');
-    if (!userDetailsStr) {
+    const storedDetails = localStorage.getItem('userDetails');
+    if (!storedDetails) {
       router.push('/');
-    } else {
-      setUserDetails(JSON.parse(userDetailsStr));
+      return;
     }
+    setUserDetails(JSON.parse(storedDetails));
+
+    // Cleanup function
+    return () => {
+      hasFetchedRef.current = false;
+    };
   }, [router]);
 
   useEffect(() => {
-    if (userDetails?.customerId) {
+    // Only fetch if we have userDetails and haven't fetched yet
+    if (userDetails?.customerId && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchCampaigns();
       fetchScreens();
     }
-  }, []);
+  }, [userDetails]); // Add userDetails as dependency
 
   const fetchCampaigns = async () => {
     try {
