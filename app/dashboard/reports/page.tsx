@@ -51,8 +51,17 @@ declare module 'jspdf' {
 export default function Reports() {
   const router = useRouter();
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
+  // Campaign Performance dates
+  const [campaignStartDate, setCampaignStartDate] = useState<string>('');
+  const [campaignEndDate, setCampaignEndDate] = useState<string>('');
+  
+  // Screen Performance dates
+  const [screenStartDate, setScreenStartDate] = useState<string>('');
+  const [screenEndDate, setScreenEndDate] = useState<string>('');
+  
+  // Screen Activity dates
+  const [activityStartDate, setActivityStartDate] = useState<string>('');
+  const [activityEndDate, setActivityEndDate] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string>('');
@@ -132,11 +141,11 @@ export default function Reports() {
   };
   
   const validateScreenActivityInputs = (): boolean => {
-    if (!startDate || !endDate) {
+    if (!activityStartDate || !activityEndDate) {
       setError('Please select both start and end dates');
       return false;
     }
-    if (new Date(startDate) > new Date(endDate)) {
+    if (new Date(activityStartDate) > new Date(activityEndDate)) {
       setError('Start date must be before end date');
       return false;
     }
@@ -148,11 +157,11 @@ export default function Reports() {
       setError('Please select a campaign');
       return false;
     }
-    if (!startDate || !endDate) {
+    if (!campaignStartDate || !campaignEndDate) {
       setError('Please select both start and end dates');
       return false;
     }
-    if (new Date(startDate) > new Date(endDate)) {
+    if (new Date(campaignStartDate) > new Date(campaignEndDate)) {
       setError('Start date must be before end date');
       return false;
     }
@@ -160,11 +169,11 @@ export default function Reports() {
   };
 
   const validateScreenReportInputs = (): boolean => {
-    if (!startDate || !endDate) {
+    if (!screenStartDate || !screenEndDate) {
       setError('Please select both start and end dates');
       return false;
     }
-    if (new Date(startDate) > new Date(endDate)) {
+    if (new Date(screenStartDate) > new Date(screenEndDate)) {
       setError('Start date must be before end date');
       return false;
     }
@@ -194,8 +203,8 @@ export default function Reports() {
       // Fetch campaign data
       const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
         _campaignid: selectedCampaign,
-        _startdate: startDate,
-        _enddate: endDate
+        _startdate: campaignStartDate,
+        _enddate: campaignEndDate
       });
 
       if (rpcError) throw new Error(rpcError.message);
@@ -393,8 +402,8 @@ export default function Reports() {
       // Fetch screen performance data
       const { data, error: rpcError } = await supabase.rpc('get_screen_performance', {
         p_customerid: userDetails.customerId,
-        p_reportstartdate: startDate,
-        p_reportenddate: endDate
+        p_reportstartdate: screenStartDate,
+        p_reportenddate: screenEndDate
       });
 
       if (rpcError) throw new Error(rpcError.message);
@@ -590,8 +599,8 @@ export default function Reports() {
         `)
         .eq('screens.customerid', userDetails.customerId)
         .eq('screens.isdeleted', false)
-        .gte('logdatetime', startDate)
-        .lte('logdatetime', endDate)
+        .gte('logdatetime', activityStartDate)
+        .lte('logdatetime', activityEndDate)
         .eq(selectedScreen ? 'screenid' : '', selectedScreen || '')
         .order('logdatetime', { ascending: false });
   
@@ -683,8 +692,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="startDate"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={campaignStartDate}
+                    onChange={(e) => setCampaignStartDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -696,8 +705,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="endDate"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={campaignEndDate}
+                    onChange={(e) => setCampaignEndDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -741,8 +750,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="screenStartDate"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={screenStartDate}
+                    onChange={(e) => setScreenStartDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -754,8 +763,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="screenEndDate"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={screenEndDate}
+                    onChange={(e) => setScreenEndDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -765,9 +774,9 @@ export default function Reports() {
               {/* Generate Report Button */}
               <button
                 type="submit"
-                disabled={!startDate || !endDate || isLoading}
+                disabled={!screenStartDate || !screenEndDate || isLoading}
                 className={`w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
-                  ${!startDate || !endDate || isLoading
+                  ${!screenStartDate || !screenEndDate || isLoading
                     ? 'bg-gray-300 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
                   }`}
@@ -834,8 +843,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="activityStartDate"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={activityStartDate}
+                    onChange={(e) => setActivityStartDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -847,8 +856,8 @@ export default function Reports() {
                   <input
                     type="date"
                     id="activityEndDate"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={activityEndDate}
+                    onChange={(e) => setActivityEndDate(e.target.value)}
                     className={inputClasses}
                     disabled={isLoading}
                   />
@@ -858,9 +867,9 @@ export default function Reports() {
               {/* Generate Report Button */}
               <button
                 type="submit"
-                disabled={!startDate || !endDate || isLoading}
+                disabled={!activityStartDate || !activityEndDate || isLoading}
                 className={`w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
-                  ${!startDate || !endDate || isLoading
+                  ${!activityStartDate || !activityEndDate || isLoading
                     ? 'bg-gray-300 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
                   }`}
@@ -884,8 +893,8 @@ export default function Reports() {
           <ReportPreview
             ref={reportRef}
             data={reportData}
-            startDate={startDate}
-            endDate={endDate}
+            startDate={campaignStartDate}
+            endDate={campaignEndDate}
           />
         )}
 
@@ -895,7 +904,7 @@ export default function Reports() {
               <div className="text-4xl font-bold">HYPER</div>
               <div className="text-right">
                 <h2 className="text-3xl font-bold mb-2">Screen Performance</h2>
-                <p className="text-gray-600">Report Dates {dayjs(startDate).format('DD-MM-YYYY')} - {dayjs(endDate).format('DD-MM-YYYY')}</p>
+                <p className="text-gray-600">Report Dates {dayjs(screenStartDate).format('DD-MM-YYYY')} - {dayjs(screenEndDate).format('DD-MM-YYYY')}</p>
               </div>
             </div>
             
