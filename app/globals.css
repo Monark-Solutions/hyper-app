@@ -31,3 +31,9 @@ color: #0a0a0a;
 .to-blue-700{
   --tw-gradient-to: #515151;
 }
+.logo{
+  content: url(logo.svg);
+}
+.bg-blue-650{
+  background-color: rgb(37, 99, 235);
+}

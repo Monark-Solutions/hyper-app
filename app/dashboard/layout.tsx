@@ -314,7 +314,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center">
               <Link href="/dashboard" className="flex-shrink-0">
-                <h1 className="text-2xl font-bold text-blue-600">HYPER</h1>
+                <img className="logo"/>
               </Link>
             </div>
 

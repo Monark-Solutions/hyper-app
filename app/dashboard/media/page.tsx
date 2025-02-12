@@ -864,7 +864,7 @@ export default function Media() {
               setSelectedPropertyTags(mediaTags);
             }}
           >
-            <div className="h-[160px] bg-gray-100 flex items-center justify-center overflow-hidden">
+            <div className="h-[80px] bg-gray-100 flex items-center justify-center overflow-hidden">
               {item.thumbnail ? (
                 <img 
                   src={`data:image/jpeg;base64,${item.thumbnail}`}
@@ -1135,7 +1135,7 @@ export default function Media() {
                                     campaign.state === 'Completed' 
                                       ? 'bg-green-600' 
                                       : campaign.state === 'Active' 
-                                        ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-600' 
+                                        ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-650' 
                                         : 'bg-gray-400'
                                   }`} 
                                   style={{ width: `${campaign.progress}%` }}

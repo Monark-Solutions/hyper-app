@@ -96,7 +96,7 @@ export default function SignUp() {
     <main className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       {/* Logo Header */}
       <div className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-blue-600">Hyper</h1>
+        <img className="logo"/>
       </div>
 
       {/* Signup Form */}

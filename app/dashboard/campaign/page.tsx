@@ -686,7 +686,7 @@ export default function Campaign() {
                       campaign.state === 'Completed' 
                         ? 'bg-green-600' 
                         : campaign.state === 'Active' 
-                          ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-600' 
+                          ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-650' 
                           : 'bg-gray-400'
                     }`} 
                     style={{ width: `${campaign.progress}%` }}

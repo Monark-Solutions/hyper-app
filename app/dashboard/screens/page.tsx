@@ -985,7 +985,7 @@ export default function Screens(): React.ReactElement {
                                         campaign.state === 'Completed' 
                                           ? 'bg-green-600' 
                                           : campaign.state === 'Active' 
-                                            ? 'bg-blue-600' 
+                                            ? 'bg-blue-650' 
                                             : 'bg-gray-400'
                                       }`} 
                                       style={{ width: `${campaign.progress}%` }}
@@ -1019,17 +1019,17 @@ export default function Screens(): React.ReactElement {
                   {activeTab === 'configuration' && (
                     <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-30">
                       <div className="flex gap-4">
+                      <button
+                          onClick={handleRetireScreen}
+                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                        >
+                          Retire Screen
+                        </button>
                         <button
                           onClick={handleUpdateScreen}
                           className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                         >
                           Update Screen
-                        </button>
-                        <button
-                          onClick={handleRetireScreen}
-                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                        >
-                          Retire Screen
                         </button>
                       </div>
                     </div>
