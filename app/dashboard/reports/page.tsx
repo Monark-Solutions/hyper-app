@@ -29,6 +29,18 @@ interface ScreenPerformance {
   performance: number;
 }
 
+interface ScreenOption {
+  value: string;
+  label: string;
+}
+
+interface ScreenActivity {
+  screenname: string;
+  logheader: string;
+  logtype: string;
+  logdatetime: string;
+}
+
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
   interface jsPDF {
@@ -51,7 +63,10 @@ export default function Reports() {
   const [userDetails, setUserDetails] = useState<any>(null);
   const screenReportRef = useRef<HTMLDivElement>(null);
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
-  
+  const [selectedScreen, setSelectedScreen] = useState<string>('');
+  const [screenActivityData, setScreenActivityData] = useState<any[]>([]);
+  const [screens, setScreens] = useState<any[]>([]);
+
   useEffect(() => {
     const userDetailsStr = localStorage.getItem('userDetails');
     if (!userDetailsStr) {
@@ -62,7 +77,10 @@ export default function Reports() {
   }, [router]);
 
   useEffect(() => {
-    fetchCampaigns();
+    if (userDetails?.customerId) {
+      fetchCampaigns();
+      fetchScreens();
+    }
   }, []);
 
   const fetchCampaigns = async () => {
@@ -71,6 +89,7 @@ export default function Reports() {
       const { data, error } = await supabase
         .from('campaigns')
         .select('*')
+        .eq('customerid', userDetails.customerId)
         .eq('isdeleted', false)
         .order('campaignname');
 
@@ -84,6 +103,38 @@ export default function Reports() {
     }
   };
 
+  const fetchScreens = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('screens')
+        .select('screenid, screenname')
+        .eq('customerid', userDetails.customerId)
+        .eq('isdeleted', false)
+        .order('screenname');
+  
+      if (error) throw error;
+      setScreens(data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch screens');
+      console.error('Error fetching screens:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const validateScreenActivityInputs = (): boolean => {
+    if (!startDate || !endDate) {
+      setError('Please select both start and end dates');
+      return false;
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      setError('Start date must be before end date');
+      return false;
+    }
+    return true;
+  };
+    
   const validateReportInputs = (): boolean => {
     if (!selectedCampaign) {
       setError('Please select a campaign');
@@ -511,6 +562,46 @@ export default function Reports() {
     }
   };
 
+  const handleGenerateScreenActivity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+  
+    if (!validateScreenActivityInputs()) return;
+  
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('activitylogs')
+        .select(`
+          logheader,
+          logtype,
+          logdatetime,
+          screens!inner (
+            screenname
+          )
+        `)
+        .eq('screens.customerid', userDetails.customerId)
+        .eq('screens.isdeleted', false)
+        .gte('logdatetime', startDate)
+        .lte('logdatetime', endDate)
+        .eq(selectedScreen ? 'screenid' : '', selectedScreen || '')
+        .order('logdatetime', { ascending: false });
+  
+      if (error) throw error;
+      setScreenActivityData(data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch activity data');
+      console.error('Error generating screen activity report:', err);
+      Swal.fire({
+        title: 'Error',
+        text: err.message || 'Failed to generate report',
+        icon: 'error'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   return (
     <LoadingOverlay
       active={isLoading}
@@ -534,6 +625,7 @@ export default function Reports() {
         </p>
 
         <div className="space-y-6">
+
           {/* Campaign Performance Section */}
           <div className="border rounded-lg p-6">
             <h3 className="font-medium text-gray-900 mb-4">Campaign Performance</h3>
@@ -586,7 +678,7 @@ export default function Reports() {
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     className={inputClasses}
-                disabled={isLoading}
+                    disabled={isLoading}
                   />
                 </div>
                 <div>
@@ -685,10 +777,98 @@ export default function Reports() {
             </form>
           </div>
 
-          {/* Media Insights Section */}
-          <div className="border p-4 rounded-lg hover:bg-gray-50 cursor-pointer">
-            <h3 className="font-medium text-gray-900">Media Insights</h3>
-            <p className="text-sm text-gray-500 mt-1">Track media performance and viewer engagement</p>
+          {/* Screen Activity Section */}
+          <div className="border rounded-lg p-6">
+            <h3 className="font-medium text-gray-900 mb-4">Screen Activity</h3>
+            
+            <form onSubmit={handleGenerateScreenActivity} className="space-y-4">
+              {/* Screen Selection */}
+              <div>
+                <label htmlFor="screen" className="block text-sm font-medium text-gray-700">
+                  Select Screen
+                </label>
+                <Select<ScreenOption>
+                  id="screen"
+                  value={selectedScreen ? { 
+                    value: selectedScreen, 
+                    label: screens.find(s => String(s.screenid) === selectedScreen)?.screenname || '' 
+                  } : null}
+                  onChange={(newValue: SingleValue<ScreenOption>) => 
+                    setSelectedScreen(newValue?.value || '')}
+                  options={screens.map(screen => ({
+                    value: String(screen.screenid),
+                    label: screen.screenname
+                  }))}
+                  isDisabled={isLoading}
+                  isClearable={true}
+                  isSearchable={true}
+                  placeholder="Choose a screen (optional)"
+                  className="mt-1"
+                  classNames={{
+                    control: (state) => 
+                      `!border-slate-300 !shadow-sm ${
+                        state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''
+                      }`,
+                    input: () => "!text-sm",
+                    option: () => "!text-sm",
+                    placeholder: () => "!text-sm !text-slate-400",
+                    singleValue: () => "!text-sm"
+                  }}
+                />
+              </div>
+
+              {/* Date Range */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="activityStartDate" className="block text-sm font-medium text-gray-700">
+                    Start Date
+                  </label>
+                  <input
+                    type="date"
+                    id="activityStartDate"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={inputClasses}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="activityEndDate" className="block text-sm font-medium text-gray-700">
+                    End Date
+                  </label>
+                  <input
+                    type="date"
+                    id="activityEndDate"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={inputClasses}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              {/* Generate Report Button */}
+              <button
+                type="submit"
+                disabled={!startDate || !endDate || isLoading}
+                className={`w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
+                  ${!startDate || !endDate || isLoading
+                    ? 'bg-gray-300 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
+                  }`}
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </>
+                ) : 'Generate Report'}
+              </button>
+            </form>
+
           </div>
         </div>
 
@@ -736,6 +916,34 @@ export default function Reports() {
                     <td className="px-4 py-2 border text-right">{screen.expected_screentime.toFixed(2)}</td>
                     <td className="px-4 py-2 border text-right">{screen.average_screentime.toFixed(2)}</td>
                     <td className="px-4 py-2 border text-right">{screen.performance.toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Results Table */}
+        {screenActivityData.length > 0 && (
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-black text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left">Screen Name</th>
+                  <th className="px-4 py-2 text-left">Log Header</th>
+                  <th className="px-4 py-2 text-left">Log Type</th>
+                  <th className="px-4 py-2 text-left">Date/Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {screenActivityData.map((activity, index) => (
+                  <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                    <td className="px-4 py-2 border">{activity.screens.screenname}</td>
+                    <td className="px-4 py-2 border">{activity.logheader}</td>
+                    <td className="px-4 py-2 border">{activity.logtype}</td>
+                    <td className="px-4 py-2 border">
+                      {dayjs(activity.logdatetime).format('DD-MM-YYYY HH:mm:ss')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
