@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  basePath: '/hypercms',
+  basePath: '',
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   // Ensure assets are served from the correct path
-  assetPrefix: '/hypercms',
+  assetPrefix: '',
 };
 
 export default nextConfig;
