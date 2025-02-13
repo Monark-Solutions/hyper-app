@@ -19,7 +19,7 @@ function Write-Error {
 }
 
 Write-Host "Starting deployment process for Hyper App..." -ForegroundColor Green
-Write-Host "Deployment target: http://13.233.98.23/hypercms`n"
+Write-Host "Deployment target: http://13.233.98.23/app`n"
 
 $startTime = Get-Date
 
@@ -63,14 +63,14 @@ try {
     Write-Host "Deployment completed successfully!"
     Write-Host "Total deployment time: $($duration.Minutes) minutes and $($duration.Seconds) seconds"
     Write-Host "`nApplication URLs:"
-    Write-Host "- http://13.233.98.23/hypercms (redirects to HTTPS)" -ForegroundColor Yellow
-    Write-Host "- https://13.233.98.23/hypercms" -ForegroundColor Yellow
+    Write-Host "- http://13.233.98.23/app (redirects to HTTPS)" -ForegroundColor Yellow
+    Write-Host "- https://13.233.98.23/app" -ForegroundColor Yellow
     
     Write-Host "`nMonitoring Information:"
     Write-Host "1. PM2 Status: pm2 status"
     Write-Host "2. PM2 Logs: pm2 logs hyper-app"
-    Write-Host "3. Application Logs: D:\Deployments\hyper-app\logs\app"
-    Write-Host "4. IIS Logs: D:\Deployments\hyper-app\logs\iis"
+    Write-Host "3. Application Logs: C:\inetpub\wwwroot\app\logs\app"
+    Write-Host "4. IIS Logs: C:\inetpub\wwwroot\app\logs\iis"
 
     Write-Host "`nNext Steps:"
     Write-Host "1. Verify the application is accessible at the URLs above"
@@ -82,7 +82,7 @@ catch {
     Write-Host "`nTroubleshooting steps:"
     Write-Host "1. Check the error messages above"
     Write-Host "2. Verify all prerequisites are installed"
-    Write-Host "3. Check the logs in D:\Deployments\hyper-app\logs"
+    Write-Host "3. Check the logs in C:\inetpub\wwwroot\app\logs"
     Write-Host "4. Ensure you have administrative privileges"
     exit 1
 }

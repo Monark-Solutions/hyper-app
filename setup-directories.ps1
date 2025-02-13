@@ -4,8 +4,8 @@
 $ErrorActionPreference = "Stop"
 
 # Base deployment directory
-$deploymentBase = "D:\Deployments"
-$appName = "hyper-app"
+$deploymentBase = "C:\inetpub\wwwroot"
+$appName = "app"
 $deployPath = Join-Path $deploymentBase $appName
 $sourceDir = $PSScriptRoot # Current directory where script is running
 

@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 # Set deployment path
-$deployPath = "D:\Deployments\hyper-app"
+$deployPath = "C:\inetpub\wwwroot\app"
 if (!(Test-Path $deployPath)) {
     throw "Deployment directory does not exist. Please run setup-directories.ps1 first."
 }
@@ -44,12 +44,12 @@ try {
     Write-Host "`nConfiguring PM2..."
     
     # Stop existing process if running
-    pm2 delete hyper-app 2>$null
+    pm2 delete app 2>$null
     
     # Start application with PM2
     Write-Host "Starting application with PM2..."
     $env:NODE_ENV = "production"
-    pm2 start server.js --name "hyper-app" --env production
+    pm2 start server.js --name "app" --env production
     if ($LASTEXITCODE -ne 0) { throw "Failed to start application with PM2" }
 
     # Save PM2 process list

@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 Import-Module WebAdministration
 
 # Set deployment path
-$deployPath = "D:\Deployments\hyper-app"
+$deployPath = "C:\inetpub\wwwroot\app"
 if (!(Test-Path $deployPath)) {
     throw "Deployment directory does not exist. Please run setup-directories.ps1 first."
 }
@@ -16,7 +16,7 @@ Write-Host "Configuring IIS..." -ForegroundColor Cyan
 
 try {
     # Create application pool
-    $appPoolName = "hyper-app-pool"
+    $appPoolName = "app-pool"
     if (!(Test-Path "IIS:\AppPools\$appPoolName")) {
         Write-Host "Creating application pool: $appPoolName"
         New-WebAppPool -Name $appPoolName
@@ -35,14 +35,14 @@ try {
     }
 
     # Remove existing application if it exists
-    if (Test-Path "IIS:\Sites\Default Web Site\hypercms") {
+    if (Test-Path "IIS:\Sites\Default Web Site\app") {
         Write-Host "Removing existing application..."
-        Remove-WebApplication -Name "hypercms" -Site "Default Web Site"
+        Remove-WebApplication -Name "app" -Site "Default Web Site"
     }
 
     # Create application under Default Web Site
-    Write-Host "Creating application: hypercms"
-    New-WebApplication -Name "hypercms" `
+    Write-Host "Creating application: app"
+    New-WebApplication -Name "app" `
                       -Site "Default Web Site" `
                       -PhysicalPath $deployPath `
                       -ApplicationPool $appPoolName `
@@ -64,7 +64,7 @@ try {
     }
 
     Write-Host "`nIIS configuration completed successfully" -ForegroundColor Green
-    Write-Host "Application URL: http://13.233.98.23/hypercms"
+    Write-Host "Application URL: http://13.233.98.23/app"
 }
 catch {
     Write-Host "`nError configuring IIS: $($_.Exception.Message)" -ForegroundColor Red
