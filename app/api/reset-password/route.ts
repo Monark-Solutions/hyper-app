@@ -4,7 +4,7 @@ import supabase from '@/lib/supabase';
 import { hashPassword } from '@/utils/password';
 import generator from 'generate-password';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend("re_ahQnP6Pq_B5oWbqJWxFCKcnFHs59ppE38");
 
 async function sendPasswordResetEmail(to: string, newPassword: string): Promise<boolean> {
   try {
