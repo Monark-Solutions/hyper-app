@@ -20,3 +20,32 @@ export interface ReportPreviewProps {
   endDate: string;
   className?: string;
 }
+
+export interface SelectOption {
+  value: string;
+  label: string;
+}
+
+export interface ScreenOption {
+  value: string;
+  label: string;
+}
+
+export interface ScreenActivity {
+  screens: {
+    screenname: string;
+  };
+  logheader: string;
+  logtype: string;
+  logdatetime: string;
+}
+
+export interface ScreenPerformance {
+  screen_name: string;
+  screen_location: string;
+  start_time: string;
+  end_time: string;
+  expected_screentime: number;
+  average_screentime: number;
+  performance: number;
+}

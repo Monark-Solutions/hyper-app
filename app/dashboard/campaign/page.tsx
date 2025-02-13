@@ -3,215 +3,102 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { Dialog } from '@headlessui/react';
-import CampaignForm from '@/components/CampaignForm';
-import { useRouter } from 'next/navigation';
-import { FiSearch, FiX } from 'react-icons/fi';
-import { BiBarChart, BiEdit, BiPause, BiPlay } from 'react-icons/bi';
-import supabase from '@/lib/supabase';
-import type { Campaign } from '@/types/campaign';
-import type { ReportData, ScreenInfo } from '@/types/report';
-
-// Extend jsPDF type to include autoTable
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: unknown) => void;
-  }
-}
-import LoadingOverlay from 'react-loading-overlay-ts';
-import Swal from 'sweetalert2';
+import { FiX, FiSearch } from 'react-icons/fi';
+import { BiEdit, BiBarChart, BiPlay, BiPause } from 'react-icons/bi';
 import dayjs from 'dayjs';
-import jsPDF from 'jspdf';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import html2canvas from 'html2canvas';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import CampaignForm from '@/components/CampaignForm';
+import LoadingOverlay from '@/components/LoadingOverlay';
 import ReportPreview from '@/components/ReportPreview';
+import supabase from '@/lib/supabase';
+import { Campaign } from '@/types/campaign';
+import { ReportData, ScreenInfo } from '@/types/report';
 
-type CampaignWithState = Campaign & { 
-  state: 'Active' | 'Scheduled' | 'Completed';
-  progress: number;
-  timeText: string;
-};
+dayjs.extend(relativeTime);
 
-export default function Campaign() {
-  const router = useRouter();
+const inputClasses = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+
+export default function CampaignsPage() {
+  // State for campaign list and filtering
+  const [campaigns, setCampaigns] = useState<(Campaign & { state: string; progress: number; timeText: string })[]>([]);
+  const [selectedState, setSelectedState] = useState('all');
   const [searchTags, setSearchTags] = useState<string[]>([]);
   const [inputValue, setInputValue] = useState('');
+
+  // State for campaign form drawer
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
-  const [selectedState, setSelectedState] = useState<string>('all');
-  const [editCampaignId, setEditCampaignId] = useState<number>(0);
+  const [editCampaignId, setEditCampaignId] = useState(0);
+
+  // State for report drawer
   const [isReportDrawerOpen, setIsReportDrawerOpen] = useState(false);
-  const [selectedCampaignForReport, setSelectedCampaignForReport] = useState<CampaignWithState | null>(null);
+  const [selectedCampaignForReport, setSelectedCampaignForReport] = useState<Campaign | null>(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
-  const [isReportLoading, setIsReportLoading] = useState(false);
-    const [reportProgressText, setReportProgressText] = useState<string>('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [reportError, setReportError] = useState<string>('');
   const reportRef = useRef<HTMLDivElement>(null);
-  const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
-
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diffTime = Math.abs(date.getTime() - now.getTime());
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    const diffWeeks = Math.floor(diffDays / 7);
-
-    if (diffWeeks > 0) {
-      return `${diffWeeks} week${diffWeeks > 1 ? 's' : ''}`;
-    }
-    return `${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-  };
-
-  const isSameDay = (date1: Date, date2: Date) => {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-  };
-
-  const fetchCampaigns = async () => {
-    const userDetails = localStorage.getItem('userDetails');
-    if (!userDetails) return;
-    
-    const { customerId } = JSON.parse(userDetails);
-    const { data, error } = await supabase
-      .from('campaigns')
-      .select('*')
-      .eq('customerid', customerId)
-      .eq('isdeleted', false)
-      .order('startdate', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching campaigns:', error);
-      return;
-    }
-
-    const currentDate = new Date();
-    const currentDateStr = currentDate.toISOString().split('T')[0];
-
-    const processedCampaigns = data.map(campaign => {
-      const startDate = new Date(campaign.startdate);
-      const endDate = new Date(campaign.enddate);
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
-      
-      let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
-      let progress = 0;
-      let timeText = '';
-
-      // Determine state and progress
-      if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
-        state = 'Active';
-        const totalDuration = endDate.getTime() - startDate.getTime();
-        const elapsed = currentDate.getTime() - startDate.getTime();
-        progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
-
-        if (isSameDay(currentDate, startDate)) {
-          timeText = 'Started Today';
-        } else {
-          timeText = `Started ${formatTimeAgo(startDate)} ago`;
-        }
-
-        if (isSameDay(currentDate, endDate)) {
-          timeText = 'Will End Today';
-        }
-      } else if (currentDateStr < startDateStr) {
-        state = 'Scheduled';
-        progress = 0;
-
-        if (isSameDay(currentDate, startDate)) {
-          timeText = 'Starts Today';
-        } else {
-          timeText = `Starts in ${formatTimeAgo(startDate)}`;
-        }
-      } else if (currentDateStr > endDateStr) {
-        state = 'Completed';
-        progress = 100;
-
-        if (isSameDay(currentDate, endDate)) {
-          timeText = 'Ended Today';
-        } else {
-          timeText = `Ended ${formatTimeAgo(endDate)} ago`;
-        }
-      }
-
-      return { ...campaign, state, progress, timeText };
-    });
-
-    setCampaigns(processedCampaigns);
-  };
-
-  const handlePlayStateUpdate = async (campaignId: number, newPlayState: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('campaigns')
-        .update({ playstate: newPlayState })
-        .eq('campaignid', campaignId);
-
-      if (error) {
-        console.error('Error updating play state:', error);
-        return;
-      }
-
-      // Immediately refresh the campaign list
-      await fetchCampaigns();
-    } catch (error) {
-      console.error('Error updating play state:', error);
-    }
-  };
-
-  const didFetch = useRef(false);
 
   useEffect(() => {
-    if (didFetch.current) return;
-
-    const userDetailsStr = localStorage.getItem('userDetails');
-    if (!userDetailsStr) {
-      router.push('/');
-      return;
-    }
-
-    try {
-      const userDetails = JSON.parse(userDetailsStr);
-      if (!userDetails?.customerId) {
-        router.push('/');
-        return;
-      }
-
-      // Set flag before fetching to prevent duplicate calls
-      didFetch.current = true;
-
-      // Load campaigns
-      fetchCampaigns().catch(error => {
-        console.error('Error loading campaigns:', error);
-        router.push('/');
-      });
-    } catch (error) {
-      console.error('Error parsing user details:', error);
-      router.push('/');
-    }
-  }, []); // Empty dependency array since we're using didFetch ref
-
-  // Handle drawer close events
-  useEffect(() => {
-    const handleCloseDrawer = () => {
-      setIsDrawerOpen(false);
-      setEditCampaignId(0);
-      fetchCampaigns();
-    };
-    window.addEventListener('closeDrawer', handleCloseDrawer);
-    return () => window.removeEventListener('closeDrawer', handleCloseDrawer);
+    loadCampaigns();
   }, []);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const loadCampaigns = async () => {
+    try {
+      const { data: campaignsData, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('isdeleted', false)
+        .order('campaignid', { ascending: false });
+
+      if (error) throw error;
+
+      const processedCampaigns = (campaignsData || []).map(campaign => {
+        const now = dayjs();
+        const startDate = dayjs(campaign.startdate);
+        const endDate = dayjs(campaign.enddate);
+        
+        let state = 'Scheduled';
+        let progress = 0;
+        let timeText = '';
+
+        if (now.isAfter(endDate)) {
+          state = 'Completed';
+          progress = 100;
+          timeText = 'Ended ' + endDate.fromNow();
+        } else if (now.isBefore(startDate)) {
+          state = 'Scheduled';
+          progress = 0;
+          timeText = 'Starts ' + startDate.fromNow();
+        } else {
+          state = 'Active';
+          const totalDuration = endDate.diff(startDate);
+          const elapsed = now.diff(startDate);
+          progress = Math.min(100, Math.round((elapsed / totalDuration) * 100));
+          timeText = 'Ends ' + endDate.fromNow();
+        }
+
+        return {
+          ...campaign,
+          state,
+          progress,
+          timeText
+        };
+      });
+
+      setCampaigns(processedCampaigns);
+    } catch (err) {
+      console.error('Error loading campaigns:', err);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && inputValue.trim()) {
       e.preventDefault();
       setSearchTags([...searchTags, inputValue.trim()]);
       setInputValue('');
-    } else if (e.key === 'Backspace' && !inputValue && searchTags.length > 0) {
-      e.preventDefault();
-      const newTags = [...searchTags];
-      newTags.pop();
-      setSearchTags(newTags);
     }
   };
 
@@ -224,204 +111,23 @@ export default function Campaign() {
     setInputValue('');
   };
 
-  const validateReportDates = (): boolean => {
-    if (!reportStartDate || !reportEndDate) {
-      setReportError('Please select both start and end dates');
-      return false;
-    }
-    if (new Date(reportStartDate) > new Date(reportEndDate)) {
-      setReportError('Start date must be before end date');
-      return false;
-    }
-    return true;
-  };
-
-  const handleGenerateReport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setReportError('');
-    setReportProgressText('');
-
-    if (!validateReportDates()) return;
-
+  const handlePlayStateUpdate = async (campaignId: number, playState: boolean) => {
     try {
-      setIsReportLoading(true);
-      setReportProgressText('Fetching campaign data...');
+      const { error } = await supabase
+        .from('campaigns')
+        .update({ playstate: playState })
+        .eq('campaignid', campaignId);
 
-      // Fetch campaign data
-      const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
-        _campaignid: String(selectedCampaignForReport?.campaignid),
-        _startdate: reportStartDate,
-        _enddate: reportEndDate
-      });
+      if (error) throw error;
 
-      if (rpcError) throw new Error(rpcError.message);
-      if (!data || data.length === 0) throw new Error('No data found for the selected period');
-
-      // Set report data
-      const reportDataValue = data[0];
-      if (!reportDataValue) throw new Error('Report data not available');
-      setReportData(reportDataValue);
-      setReportProgressText('Preparing report layout...');
-
-      // Wait for next render cycle and ensure reportData is set
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-
-      // Ensure report element exists
-      if (!reportRef.current) {
-        throw new Error('Report layout not ready');
-      }
-
-      setReportProgressText('Loading campaign image...');
-
-      // Pre-load image
-      const tempImg = document.createElement('img');
-      await new Promise<void>((resolve, reject) => {
-        tempImg.onload = () => resolve();
-        tempImg.onerror = () => reject(new Error('Failed to load image'));
-        tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
-      });
-
-      setReportProgressText('Preparing PDF generation...');
-
-      // Apply styles for PDF generation
-      const style = document.createElement('style');
-      style.innerHTML = `
-        th {
-          background-color: #000000 !important;
-          color: #ffffff !important;
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-        }
-        img {
-          object-fit: contain !important;
-          border-radius: 0.5rem !important;
-        }
-      `;
-      document.head.appendChild(style);
-
-      // Generate high-quality canvas
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 3,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: reportRef.current.offsetWidth,
-        height: reportRef.current.offsetHeight,
-        imageTimeout: 0,
-        onclone: (doc) => {
-          // Ensure styles are applied in cloned document
-          doc.head.appendChild(style.cloneNode(true));
-        }
-      });
-
-      setReportProgressText('Converting to PDF format...');
-
-      try {
-        // Create PDF
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4',
-          compress: true,
-          putOnlyUsedFonts: true
-        });
-
-        // Get header section only
-        const headerSection = reportRef.current?.querySelector('table:first-of-type');
-        if (!headerSection) throw new Error('Header section not found');
-
-        // Convert header section to image
-        const headerCanvas = await html2canvas(headerSection as HTMLElement, {
-          scale: 3,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          logging: false
-        });
-
-        // Add header image to PDF
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const margin = 10;
-        const contentWidth = pdfWidth - (margin * 2);
-        const headerHeight = (headerCanvas.height * contentWidth) / headerCanvas.width;
-        const headerImgData = headerCanvas.toDataURL('image/jpeg', 1.0);
-        pdf.addImage(headerImgData, 'JPEG', margin, margin, contentWidth, headerHeight);
-
-        // Add table using autoTable
-        const tableData = reportDataValue.screeninfo.map((screen: ScreenInfo) => [
-          screen.screenname,
-          screen.screenlocation,
-          screen.screentotalviews.toString()
-        ]);
-
-        pdf.autoTable({
-          startY: headerHeight + (margin * 2),
-          head: [[
-            'Screen Name',
-            'Location',
-            'Total Views'
-          ]],
-          body: tableData,
-          theme: 'grid',
-          headStyles: {
-            fillColor: [0, 0, 0],
-            textColor: [255, 255, 255],
-            fontStyle: 'bold'
-          },
-          styles: {
-            fontSize: 10,
-            cellPadding: 5
-          },
-          columnStyles: {
-            0: { cellWidth: 'auto' },
-            1: { cellWidth: 'auto' },
-            2: { cellWidth: 'auto', halign: 'right' }
-          },
-          didDrawPage: (pageInfo: any) => {
-            // Start table content from top margin on subsequent pages
-            if (pageInfo.pageNumber > 1) {
-              pageInfo.settings.startY = margin;
-            }
-          },
-          showHead: 'everyPage',
-          margin: { top: margin, right: margin, bottom: margin, left: margin }
-        });
-
-        // Generate filename with timestamp
-        const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
-        const fileName = `campaign-report-${timestamp}.pdf`;
-
-        setReportProgressText('Finalizing report...');
-
-        // Save PDF and clean up
-        pdf.save(fileName);
-        document.head.removeChild(style);
-
-        setReportProgressText('Report downloaded successfully!');
-
-        // Show success message
-        Swal.fire({
-          title: 'Success!',
-          text: 'Report has been generated and downloaded',
-          icon: 'success'
-        });
-      } catch (pdfError) {
-        console.error('PDF generation error:', pdfError);
-        throw new Error('Failed to generate PDF');
-      }
-
-    } catch (err: any) {
-      setReportError(err.message || 'Failed to generate report');
-      console.error('Error generating report:', err);
-      Swal.fire({
-        title: 'Error',
-        text: err.message || 'Failed to generate report',
-        icon: 'error'
-      });
-    } finally {
-      setIsReportLoading(false);
-      setReportProgressText('');
+      // Update local state
+      setCampaigns(campaigns.map(campaign => 
+        campaign.campaignid === campaignId 
+          ? { ...campaign, playstate: playState } 
+          : campaign
+      ));
+    } catch (err) {
+      console.error('Error updating campaign play state:', err);
     }
   };
 
@@ -430,8 +136,81 @@ export default function Campaign() {
     setSelectedCampaignForReport(null);
     setReportStartDate('');
     setReportEndDate('');
-    setReportError('');
     setReportData(null);
+    setReportError(null);
+  };
+
+  const handleGenerateReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCampaignForReport || !reportStartDate || !reportEndDate) return;
+
+    try {
+      setIsReportLoading(true);
+      setReportError(null);
+
+      // Fetch screen views
+      const { data: viewsData, error: viewsError } = await supabase
+        .from('screen_views')
+        .select(`
+          screens (
+            screenname,
+            screenlocation
+          ),
+          count
+        `)
+        .eq('campaignid', selectedCampaignForReport.campaignid)
+        .gte('viewdate', reportStartDate)
+        .lte('viewdate', reportEndDate);
+
+      if (viewsError) throw viewsError;
+
+      // Process data for report
+      const screenInfo: ScreenInfo[] = [];
+      let totalViews = 0;
+
+      viewsData?.forEach(view => {
+        if (view.screens && typeof view.screens === 'object' && 'screenname' in view.screens && 'screenlocation' in view.screens) {
+          const screenData: ScreenInfo = {
+            screenname: String(view.screens.screenname),
+            screenlocation: String(view.screens.screenlocation),
+            screentotalviews: Number(view.count) || 0
+          };
+          screenInfo.push(screenData);
+          totalViews += screenData.screentotalviews;
+        }
+      });
+
+      const reportData: ReportData = {
+        campaignname: selectedCampaignForReport.campaignname,
+        startdate: selectedCampaignForReport.startdate,
+        enddate: selectedCampaignForReport.enddate,
+        totalsites: screenInfo.length,
+        totalviews: totalViews,
+        thumbnail: '',
+        screeninfo: screenInfo
+      };
+
+      setReportData(reportData);
+
+      // Generate PDF after a short delay
+      setTimeout(() => {
+        if (reportRef.current) {
+          html2canvas(reportRef.current).then(canvas => {
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`campaign-report-${dayjs().format('YYYY-MM-DD')}.pdf`);
+          });
+        }
+      }, 500);
+
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'An error occurred while generating the report');
+    } finally {
+      setIsReportLoading(false);
+    }
   };
 
   return (
@@ -447,65 +226,6 @@ export default function Campaign() {
         >
           Create Campaign
         </button>
-
-        {/* Campaign Form Dialog */}
-        <Dialog
-          open={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          className="fixed inset-0 z-[60]"
-        >
-          <div className="fixed inset-0">
-            <div className="absolute inset-0 bg-black bg-opacity-40" />
-            <div className="fixed inset-0">
-            <Dialog.Panel className="w-full h-full bg-white overflow-auto">
-                <div className="h-full flex flex-col">
-                  <div className="border-b border-gray-200 px-8 py-4">
-                    <div className="flex items-center justify-between max-w-[1920px] mx-auto">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
-                      </h2>
-                      <button
-                        onClick={() => setIsDrawerOpen(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        <FiX className="w-6 h-6" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="px-6 py-2 w-full h-full">
-                      <CampaignForm campaignId={editCampaignId} mediaId={0} />
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0 px-8 py-4 flex justify-end border-t border-gray-200 bg-white">
-                    <div className="flex items-center gap-6">
-                      {editCampaignId > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const form = document.getElementById('campaign-form') as HTMLFormElement;
-                            const deleteButton = form.querySelector('[data-action="delete"]') as HTMLButtonElement;
-                            deleteButton?.click();
-                          }}
-                          className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                        >
-                          Delete Campaign
-                        </button>
-                      )}
-                      <button
-                        type="submit"
-                        form="campaign-form"
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                      >
-                        {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </Dialog.Panel>
-            </div>
-          </div>
-        </Dialog>
       </div>
 
       <div className="mb-6">
@@ -535,6 +255,7 @@ export default function Campaign() {
             Completed
           </button>
         </div>
+
         <div className="relative flex items-center">
           <div className="flex-1 flex flex-wrap gap-2 px-4 py-2 border border-gray-300 rounded-md focus-within:ring-blue-500 focus-within:border-blue-500">
             {searchTags.map((tag, index) => (
@@ -585,21 +306,16 @@ export default function Campaign() {
       </div>
 
       <div className="space-y-4">
-        {/* Campaign Items */}
         {campaigns
           .filter(campaign => {
-            // Filter by state
             if (selectedState !== 'all' && campaign.state !== selectedState) {
               return false;
             }
-            
-            // Filter by search tags
             if (searchTags.length > 0) {
               return searchTags.some(tag => 
                 campaign.campaignname.toLowerCase().includes(tag.toLowerCase())
               );
             }
-            
             return true;
           })
           .map(campaign => (
@@ -608,7 +324,9 @@ export default function Campaign() {
                 <div>
                   <h3 className="font-medium text-gray-900">{campaign.campaignname}</h3>
                   <p className="text-sm text-gray-500 mt-1">{campaign.state} • {campaign.timeText}</p>
-                  <p className="text-sm text-gray-500 mt-1 bold">{dayjs(campaign.startdate).format('DD-MM-YYYY')} - {dayjs(campaign.enddate).format('DD-MM-YYYY')}</p>
+                  <p className="text-sm text-gray-500 mt-1 bold">
+                    {dayjs(campaign.startdate).format('DD-MM-YYYY')} - {dayjs(campaign.enddate).format('DD-MM-YYYY')}
+                  </p>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="relative group">
@@ -681,7 +399,7 @@ export default function Campaign() {
                           : 'bg-gray-400'
                     }`} 
                     style={{ width: `${campaign.progress}%` }}
-                  ></div>
+                  />
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
                   {campaign.state === 'Completed' 
@@ -695,7 +413,66 @@ export default function Campaign() {
           ))}
       </div>
 
-      {/* Report Drawer */}
+      {/* Campaign Form Dialog */}
+      <Dialog
+        open={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        className="fixed inset-0 z-[60]"
+      >
+        <div className="fixed inset-0">
+          <div className="absolute inset-0 bg-black bg-opacity-40" />
+          <div className="fixed inset-0">
+            <Dialog.Panel className="w-full h-full bg-white overflow-auto">
+              <div className="h-full flex flex-col">
+                <div className="border-b border-gray-200 px-8 py-4">
+                  <div className="flex items-center justify-between max-w-[1920px] mx-auto">
+                    <h2 className="text-xl font-semibold text-gray-900">
+                      {editCampaignId ? 'Edit Campaign' : 'Create Campaign'}
+                    </h2>
+                    <button
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <FiX className="w-6 h-6" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <div className="px-6 py-2 w-full h-full">
+                    <CampaignForm campaignId={editCampaignId} mediaId={0} />
+                  </div>
+                </div>
+                <div className="flex-shrink-0 px-8 py-4 flex justify-end border-t border-gray-200 bg-white">
+                  <div className="flex items-center gap-6">
+                    {editCampaignId > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const form = document.getElementById('campaign-form') as HTMLFormElement;
+                          const deleteButton = form.querySelector('[data-action="delete"]') as HTMLButtonElement;
+                          deleteButton?.click();
+                        }}
+                        className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      >
+                        Delete Campaign
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      form="campaign-form"
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </Dialog.Panel>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* Report Dialog */}
       <Dialog
         open={isReportDrawerOpen}
         onClose={handleCloseReportDrawer}
@@ -705,21 +482,7 @@ export default function Campaign() {
           <div className="absolute inset-0 bg-black bg-opacity-40" />
           <div className="fixed inset-0">
             <Dialog.Panel className="w-full h-full bg-white overflow-auto">
-              <LoadingOverlay
-                active={isReportLoading}
-                spinner
-                text={reportProgressText}
-                styles={{
-                  overlay: (base) => ({
-                    ...base,
-                    background: 'rgba(255, 255, 255, 0.8)'
-                  }),
-                  content: (base) => ({
-                    ...base,
-                    color: '#2563eb'
-                  })
-                }}
-              >
+              <LoadingOverlay active={isReportLoading}>
                 <div className="h-full flex flex-col">
                   <div className="border-b border-gray-200 px-8 py-4">
                     <div className="flex items-center justify-between max-w-[1920px] mx-auto">
@@ -782,8 +545,8 @@ export default function Campaign() {
                           {isReportLoading ? (
                             <>
                               <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
                               Generating...
                             </>
