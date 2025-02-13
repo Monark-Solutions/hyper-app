@@ -11,7 +11,7 @@ interface PageProps {
   };
 }
 
-export default async function CampaignPage({ params, searchParams }: PageProps) {
+export default async function CampaignPage({searchParams }: PageProps) {
   // Await searchParams to properly handle them in Next.js 13+
   const { id, mediaid } = await Promise.resolve(searchParams);
   

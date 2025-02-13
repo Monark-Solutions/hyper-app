@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link'
+import Image from 'next/image'
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
@@ -96,7 +97,13 @@ export default function SignUp() {
     <main className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       {/* Logo Header */}
       <div className="mb-8 text-center">
-        <img className="logo"/>
+        <Image
+          src="/logo.svg"
+          alt="Hyper Logo"
+          width={150}
+          height={50}
+          priority
+        />
       </div>
 
       {/* Signup Form */}

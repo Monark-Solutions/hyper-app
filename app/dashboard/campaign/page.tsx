@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -13,7 +14,7 @@ import type { ReportData, ScreenInfo } from '@/types/report';
 // Extend jsPDF type to include autoTable
 declare module 'jspdf' {
   interface jsPDF {
-    autoTable: (options: any) => void;
+    autoTable: (options: unknown) => void;
   }
 }
 import LoadingOverlay from 'react-loading-overlay-ts';
@@ -43,14 +44,13 @@ export default function Campaign() {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
-  const [reportProgress, setReportProgress] = useState<number>(0);
-  const [reportProgressText, setReportProgressText] = useState<string>('');
+    const [reportProgressText, setReportProgressText] = useState<string>('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [reportError, setReportError] = useState<string>('');
   const reportRef = useRef<HTMLDivElement>(null);
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
 
-  const formatTimeAgo = (date: Date, isEndDate: boolean = false) => {
+  const formatTimeAgo = (date: Date) => {
     const now = new Date();
     const diffTime = Math.abs(date.getTime() - now.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -239,7 +239,6 @@ export default function Campaign() {
   const handleGenerateReport = async (e: React.FormEvent) => {
     e.preventDefault();
     setReportError('');
-    setReportProgress(0);
     setReportProgressText('');
 
     if (!validateReportDates()) return;
@@ -247,7 +246,6 @@ export default function Campaign() {
     try {
       setIsReportLoading(true);
       setReportProgressText('Fetching campaign data...');
-      setReportProgress(10);
 
       // Fetch campaign data
       const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
@@ -263,7 +261,6 @@ export default function Campaign() {
       const reportDataValue = data[0];
       if (!reportDataValue) throw new Error('Report data not available');
       setReportData(reportDataValue);
-      setReportProgress(30);
       setReportProgressText('Preparing report layout...');
 
       // Wait for next render cycle and ensure reportData is set
@@ -274,7 +271,6 @@ export default function Campaign() {
         throw new Error('Report layout not ready');
       }
 
-      setReportProgress(40);
       setReportProgressText('Loading campaign image...');
 
       // Pre-load image
@@ -285,7 +281,6 @@ export default function Campaign() {
         tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
       });
 
-      setReportProgress(50);
       setReportProgressText('Preparing PDF generation...');
 
       // Apply styles for PDF generation
@@ -320,7 +315,6 @@ export default function Campaign() {
         }
       });
 
-      setReportProgress(70);
       setReportProgressText('Converting to PDF format...');
 
       try {
@@ -398,14 +392,12 @@ export default function Campaign() {
         const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
         const fileName = `campaign-report-${timestamp}.pdf`;
 
-        setReportProgress(90);
         setReportProgressText('Finalizing report...');
 
         // Save PDF and clean up
         pdf.save(fileName);
         document.head.removeChild(style);
 
-        setReportProgress(100);
         setReportProgressText('Report downloaded successfully!');
 
         // Show success message
@@ -429,7 +421,6 @@ export default function Campaign() {
       });
     } finally {
       setIsReportLoading(false);
-      setReportProgress(0);
       setReportProgressText('');
     }
   };

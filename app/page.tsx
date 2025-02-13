@@ -1,7 +1,7 @@
 "use client";
 import Link from 'next/link'
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import Swal from 'sweetalert2';
 import supabase from '@/lib/supabase';
 import { comparePasswords } from '@/utils/password';
@@ -119,7 +119,13 @@ export default function Home() {
     <main className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       {/* Logo Header */}
       <div className="mb-8 text-center">
-        <img className="logo"/>
+        <Image 
+          src="/logo.svg"
+          alt="Company Logo"
+          width={150}
+          height={50}
+          className="logo"
+        />
       </div>
 
       {/* Login Form */}
@@ -195,7 +201,7 @@ export default function Home() {
 
           {/* Sign Up Link */}
           <div className="text-center mt-4">
-            <span className="text-sm text-gray-600">Don't have an account? </span>
+            <span className="text-sm text-gray-600">Don&apos;t have an account? </span>
             <Link href="/signup" className="text-sm text-blue-600 hover:text-blue-500">
               Sign up
             </Link>

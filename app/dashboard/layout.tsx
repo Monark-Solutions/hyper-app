@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -6,6 +7,7 @@ import supabase from '@/lib/supabase';
 import { hashPassword, comparePasswords } from '@/utils/password';
 import Swal from 'sweetalert2';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   RiDashboardLine, 
   RiMovie2Line, 
@@ -314,7 +316,13 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
           <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
             <div className="flex items-center">
               <Link href="/dashboard" className="flex-shrink-0">
-                <img className="logo"/>
+                <Image 
+                          src="/logo.svg"
+                          alt="Company Logo"
+                          width={150}
+                          height={50}
+                          className="logo"
+                        />
               </Link>
             </div>
 

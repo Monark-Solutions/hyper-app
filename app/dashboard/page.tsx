@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -117,7 +118,7 @@ export default function Dashboard() {
           Welcome back, {userDetails.username}!
         </h1>
         <p className="mt-2 text-blue-100">
-          Here's an overview of your digital signage operations.
+          Here&apos;s an overview of your digital signage operations.
         </p>
       </div>
 

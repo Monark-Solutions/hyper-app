@@ -1,14 +1,14 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ActionMeta, MultiValue } from 'react-select';
 import CreatableSelect from 'react-select/creatable';
-import { GroupBase } from 'react-select';
 import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { useDropzone } from 'react-dropzone';
-import { FiUpload, FiX, FiSearch, FiImage, FiVideo, FiTag, FiTrash2, FiPlus } from 'react-icons/fi';
-import { BiBarChart, BiEdit, BiPause, BiPlay } from 'react-icons/bi';
+import { FiUpload, FiX, FiSearch, FiImage, FiVideo, FiTrash2, FiPlus } from 'react-icons/fi';
+import { BiEdit, BiPause, BiPlay } from 'react-icons/bi';
 import CampaignForm from '@/components/CampaignForm';
 import type { Campaign } from '@/types/campaign';
 import supabase from '@/lib/supabase';
@@ -59,9 +59,7 @@ export default function Media() {
   const [editCampaignId, setEditCampaignId] = useState<number>(0);
   const [selectedPropertyTags, setSelectedPropertyTags] = useState<Tag[]>([]);
   const [propertyNewTag, setPropertyNewTag] = useState('');
-  const [showPropertyTagDropdown, setShowPropertyTagDropdown] = useState(false);
-  const [filteredPropertyTags, setFilteredPropertyTags] = useState<Tag[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
+    const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState('');
@@ -77,7 +75,7 @@ export default function Media() {
   const [searchInput, setSearchInput] = useState('');
   const ITEMS_PER_PAGE = 8;
 
-  const formatTimeAgo = (date: Date, isEndDate: boolean = false) => {
+  const formatTimeAgo = (date: Date) => {
     const now = new Date();
     const diffTime = Math.abs(date.getTime() - now.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -253,9 +251,6 @@ export default function Media() {
       return;
     }
 
-    const totalFiles = selectedFiles.length;
-    let completedFiles = 0;
-
     for (const [index, fileData] of selectedFiles.entries()) {
       try {
         // Initialize progress for this file
@@ -332,8 +327,6 @@ export default function Media() {
           ...prev,
           [fileData.file.name]: 100
         }));
-
-        completedFiles++;
 
       } catch (error) {
         console.error('Error uploading file:', error);
