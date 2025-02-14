@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Campaign } from '@/types/campaign';
-import { ReportData, ScreenInfo, SelectOption, ScreenOption, ScreenActivity, ScreenPerformance } from '@/types/report';
+import { ReportData, ScreenInfo } from '@/types/report';
 import supabase from '@/lib/supabase';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import Swal from 'sweetalert2';
@@ -15,275 +14,615 @@ import 'jspdf-autotable';
 import Select, { SingleValue } from 'react-select';
 import ReportPreview from '@/components/ReportPreview';
 
-const inputClasses = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+interface SelectOption {
+  value: string;
+  label: string;
+}
 
-export default function ReportsPage() {
+interface ScreenPerformance {
+  screen_name: string;
+  screen_location: string;
+  start_time: string;
+  end_time: string;
+  expected_screentime: number;
+  average_screentime: number;
+  performance: number;
+}
+
+interface ScreenOption {
+  value: string;
+  label: string;
+}
+
+interface ScreenActivity {
+  screenname: string;
+  logheader: string;
+  logtype: string;
+  logdatetime: string;
+}
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => void;
+  }
+}
+
+export default function Reports() {
   const router = useRouter();
-  const reportRef = useRef<HTMLDivElement>(null);
-  const screenReportRef = useRef<HTMLDivElement>(null);
-
-  // State for loading and error handling
+  const [selectedCampaign, setSelectedCampaign] = useState<string>('');
+  // Campaign Performance dates
+  const [campaignStartDate, setCampaignStartDate] = useState<string>('');
+  const [campaignEndDate, setCampaignEndDate] = useState<string>('');
+  
+  // Screen Performance dates
+  const [screenStartDate, setScreenStartDate] = useState<string>('');
+  const [screenEndDate, setScreenEndDate] = useState<string>('');
+  
+  // Screen Activity dates
+  const [activityStartDate, setActivityStartDate] = useState<string>('');
+  const [activityEndDate, setActivityEndDate] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // State for campaigns and screens
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [screens, setScreens] = useState<any[]>([]);
-
-  // State for campaign report
-  const [selectedCampaign, setSelectedCampaign] = useState('');
-  const [campaignStartDate, setCampaignStartDate] = useState('');
-  const [campaignEndDate, setCampaignEndDate] = useState('');
+  const [error, setError] = useState<string>('');
+  const [progress, setProgress] = useState<number>(0);
+  const [progressText, setProgressText] = useState<string>('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [reportStartDate, setReportStartDate] = useState('');
-  const [reportEndDate, setReportEndDate] = useState('');
+  const [screenPerformanceData, setScreenPerformanceData] = useState<ScreenPerformance[] | null>(null);
+  const [userDetails, setUserDetails] = useState<any>(null);
+  const screenReportRef = useRef<HTMLDivElement>(null);
+  const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+  const [selectedScreen, setSelectedScreen] = useState<string>('');
+  const [screenActivityData, setScreenActivityData] = useState<any[]>([]);
+  const [screens, setScreens] = useState<any[]>([]);
+  const hasFetchedRef = useRef(false);
 
-  // State for screen performance
-  const [screenStartDate, setScreenStartDate] = useState('');
-  const [screenEndDate, setScreenEndDate] = useState('');
-  const [screenPerformanceData, setScreenPerformanceData] = useState<ScreenPerformance[]>([]);
-
-  // State for screen activity
-  const [selectedScreen, setSelectedScreen] = useState('');
-  const [activityStartDate, setActivityStartDate] = useState('');
-  const [activityEndDate, setActivityEndDate] = useState('');
-  const [screenActivityData, setScreenActivityData] = useState<ScreenActivity[]>([]);
-
-  // Load initial data
   useEffect(() => {
-    const loadInitialData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
+    const storedDetails = localStorage.getItem('userDetails');
+    if (!storedDetails) {
+      router.push('/');
+      return;
+    }
+    setUserDetails(JSON.parse(storedDetails));
 
-        // Fetch campaigns
-        const { data: campaignsData, error: campaignsError } = await supabase
-          .from('campaigns')
-          .select('*')
-          .eq('isdeleted', false)
-          .order('campaignname');
-
-        if (campaignsError) throw new Error(campaignsError.message);
-        setCampaigns(campaignsData || []);
-
-        // Fetch screens
-        const { data: screensData, error: screensError } = await supabase
-          .from('screens')
-          .select('*')
-          .eq('isdeleted', false)
-          .order('screenname');
-
-        if (screensError) throw new Error(screensError.message);
-        setScreens(screensData || []);
-
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred while loading data');
-      } finally {
-        setIsLoading(false);
-      }
+    // Cleanup function
+    return () => {
+      hasFetchedRef.current = false;
     };
+  }, [router]);
 
-    loadInitialData();
-  }, []);
+  useEffect(() => {
+    // Only fetch if we have userDetails and haven't fetched yet
+    if (userDetails?.customerId && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
+      fetchCampaigns();
+      fetchScreens();
+    }
+  }, [userDetails]); // Add userDetails as dependency
+
+  const fetchCampaigns = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('campaigns')
+        .select('*')
+        .eq('customerid', userDetails.customerId)
+        .eq('isdeleted', false)
+        .order('campaignname');
+
+      if (error) throw error;
+      setCampaigns(data || []);
+    } catch (err) {
+      setError('Failed to fetch campaigns');
+      console.error('Error fetching campaigns:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchScreens = async () => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('screens')
+        .select('screenid, screenname')
+        .eq('customerid', userDetails.customerId)
+        .eq('isdeleted', false)
+        .order('screenname');
+  
+      if (error) throw error;
+      setScreens(data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch screens');
+      console.error('Error fetching screens:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const validateScreenActivityInputs = (): boolean => {
+    if (!activityStartDate || !activityEndDate) {
+      setError('Please select both start and end dates');
+      return false;
+    }
+    if (new Date(activityStartDate) > new Date(activityEndDate)) {
+      setError('Start date must be before end date');
+      return false;
+    }
+    return true;
+  };
+    
+  const validateReportInputs = (): boolean => {
+    if (!selectedCampaign) {
+      setError('Please select a campaign');
+      return false;
+    }
+    if (!campaignStartDate || !campaignEndDate) {
+      setError('Please select both start and end dates');
+      return false;
+    }
+    if (new Date(campaignStartDate) > new Date(campaignEndDate)) {
+      setError('Start date must be before end date');
+      return false;
+    }
+    return true;
+  };
+
+  const validateScreenReportInputs = (): boolean => {
+    if (!screenStartDate || !screenEndDate) {
+      setError('Please select both start and end dates');
+      return false;
+    }
+    if (new Date(screenStartDate) > new Date(screenEndDate)) {
+      setError('Start date must be before end date');
+      return false;
+    }
+    return true;
+  };
+
+  const reportRef = useRef<HTMLDivElement>(null);
+
+  const formatDate = (date: string) => {
+    const formatted = dayjs(date).format('DD-MM-YYYY');
+    return formatted.toLowerCase();
+  };
 
   const handleGenerateReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCampaign) return;
+    setError('');
+    setProgress(0);
+    setProgressText('');
+
+    if (!validateReportInputs()) return;
 
     try {
       setIsLoading(true);
-      setError(null);
+      setProgressText('Fetching campaign data...');
+      setProgress(10);
 
-      // Fetch campaign details
-      const { data: campaignData, error: campaignError } = await supabase
-        .from('campaigns')
-        .select(`
-          *,
-          media (
-            thumbnail
-          )
-        `)
-        .eq('campaignid', selectedCampaign)
-        .single();
+      // Fetch campaign data
+      const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
+        _campaignid: selectedCampaign,
+        _startdate: campaignStartDate,
+        _enddate: campaignEndDate
+      });
 
-      if (campaignError) throw new Error(campaignError.message);
+      if (rpcError) throw new Error(rpcError.message);
+      if (!data || data.length === 0) throw new Error('No data found for the selected period');
 
-      // Fetch screen views
-      const { data: viewsData, error: viewsError } = await supabase
-        .from('screen_views')
-        .select(`
-          screens (
-            screenname,
-            screenlocation
-          ),
-          count
-        `)
-        .eq('campaignid', selectedCampaign)
-        .gte('viewdate', campaignStartDate)
-        .lte('viewdate', campaignEndDate);
+      // Set report data
+      const reportDataValue = data[0];
+      if (!reportDataValue) throw new Error('Report data not available');
+      setReportData(reportDataValue);
+      setProgress(30);
+      setProgressText('Preparing report layout...');
 
-      if (viewsError) throw new Error(viewsError.message);
+      // Wait for next render cycle and ensure reportData is set
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
-      // Process data for report
-      const screenInfo: ScreenInfo[] = [];
-      let totalViews = 0;
+      // Ensure report element exists
+      if (!reportRef.current) {
+        throw new Error('Report layout not ready');
+      }
 
-      viewsData?.forEach(view => {
-        if (view.screens && typeof view.screens === 'object' && 'screenname' in view.screens && 'screenlocation' in view.screens) {
-          const screenData: ScreenInfo = {
-            screenname: String(view.screens.screenname),
-            screenlocation: String(view.screens.screenlocation),
-            screentotalviews: Number(view.count) || 0
-          };
-          screenInfo.push(screenData);
-          totalViews += screenData.screentotalviews;
+      setProgress(40);
+      setProgressText('Loading campaign image...');
+
+      // Pre-load image
+      const tempImg = document.createElement('img');
+      await new Promise<void>((resolve, reject) => {
+        tempImg.onload = () => resolve();
+        tempImg.onerror = () => reject(new Error('Failed to load image'));
+        tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
+      });
+
+      setProgress(50);
+      setProgressText('Preparing PDF generation...');
+
+      // Apply styles for PDF generation
+      const style = document.createElement('style');
+      style.innerHTML = `
+        th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        img {
+          object-fit: contain !important;
+          border-radius: 0.5rem !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Generate high-quality canvas
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: reportRef.current.offsetWidth,
+        height: reportRef.current.offsetHeight,
+        imageTimeout: 0,
+        onclone: (doc) => {
+          // Ensure styles are applied in cloned document
+          doc.head.appendChild(style.cloneNode(true));
         }
       });
 
-      const reportData: ReportData = {
-        campaignname: campaignData.campaignname,
-        startdate: campaignData.startdate,
-        enddate: campaignData.enddate,
-        totalsites: screenInfo.length,
-        totalviews: totalViews,
-        thumbnail: campaignData.media?.thumbnail || '',
-        screeninfo: screenInfo
-      };
+      setProgress(70);
+      setProgressText('Converting to PDF format...');
 
-      setReportData(reportData);
-      setReportStartDate(campaignStartDate);
-      setReportEndDate(campaignEndDate);
+      try {
+        // Create PDF
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+          compress: true,
+          putOnlyUsedFonts: true
+        });
 
-      // Generate PDF after a short delay to ensure the DOM is updated
-      setTimeout(() => {
-        if (reportRef.current) {
-          html2canvas(reportRef.current).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`campaign-report-${dayjs().format('YYYY-MM-DD')}.pdf`);
-          });
-        }
-      }, 500);
+        // Get header section only
+        const reportHeaderSection = reportRef.current?.querySelector('table:first-of-type');
+        if (!reportHeaderSection) throw new Error('Report header section not found');
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while generating the report');
+        // Convert header section to image
+        const reportHeaderCanvas = await html2canvas(reportHeaderSection as HTMLElement, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+
+        // Add header image to PDF
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const margin = 10;
+        const contentWidth = pdfWidth - (margin * 2);
+        const reportHeaderHeight = (reportHeaderCanvas.height * contentWidth) / reportHeaderCanvas.width;
+        const reportHeaderImgData = reportHeaderCanvas.toDataURL('image/jpeg', 1.0);
+        pdf.addImage(reportHeaderImgData, 'JPEG', margin, margin, contentWidth, reportHeaderHeight);
+
+        // Prepare table data
+        const tableData = reportDataValue.screeninfo.map((screen: ScreenInfo) => [
+          screen.screenname,
+          screen.screenlocation,
+          screen.screentotalviews.toString()
+        ]);
+
+        // Add table using autoTable
+        pdf.autoTable({
+          startY: reportHeaderHeight + margin + 10,
+          head: [[
+            'Screen Name',
+            'Location',
+            'Total Views'
+          ]],
+          body: tableData,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [0, 0, 0],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          styles: {
+            fontSize: 10,
+            cellPadding: 5
+          },
+          columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 'auto', halign: 'right' }
+          },
+          didDrawPage: (pageInfo: any) => {
+            // Start table content from top margin on subsequent pages
+            if (pageInfo.pageNumber > 1) {
+              pageInfo.settings.startY = margin;
+            }
+          },
+          showHead: 'everyPage',
+          margin: { top: margin, right: margin, bottom: margin, left: margin }
+        });
+
+        // Generate filename with timestamp
+        const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
+        const fileName = `campaign-report-${timestamp}.pdf`;
+
+        setProgress(90);
+        setProgressText('Finalizing report...');
+
+        // Save PDF and clean up
+        pdf.save(fileName);
+        document.head.removeChild(style);
+
+        setProgress(100);
+        setProgressText('Report downloaded successfully!');
+
+        // Show success message
+        Swal.fire({
+          title: 'Success!',
+          text: 'Report has been generated and downloaded',
+          icon: 'success'
+        });
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        throw new Error('Failed to generate PDF');
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate report');
+      console.error('Error generating report:', err);
       Swal.fire({
-        icon: 'error',
         title: 'Error',
-        text: err instanceof Error ? err.message : 'An error occurred while generating the report'
+        text: err.message || 'Failed to generate report',
+        icon: 'error'
       });
     } finally {
       setIsLoading(false);
+      setProgress(0);
+      setProgressText('');
     }
   };
 
   const handleGenerateScreenReport = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!screenStartDate || !screenEndDate) return;
+    setError('');
+    setProgress(0);
+    setProgressText('');
+
+    if (!validateScreenReportInputs()) return;
 
     try {
       setIsLoading(true);
-      setError(null);
+      setProgressText('Fetching screen performance data...');
+      setProgress(10);
 
-      const { data, error } = await supabase
-        .rpc('get_screen_performance', {
-          start_date: screenStartDate,
-          end_date: screenEndDate
+      // Fetch screen performance data
+      const { data, error: rpcError } = await supabase.rpc('get_screen_performance', {
+        p_customerid: userDetails.customerId,
+        p_reportstartdate: screenStartDate,
+        p_reportenddate: screenEndDate
+      });
+
+      if (rpcError) throw new Error(rpcError.message);
+      if (!data || data.length === 0) throw new Error('No data found for the selected period');
+
+      setScreenPerformanceData(data);
+      setProgress(30);
+      setProgressText('Preparing report layout...');
+
+      // Wait for DOM to update with screen performance data
+      await new Promise<void>(resolve => {
+        // First wait for state update
+        setTimeout(() => {
+          // Then wait for next render cycle
+          requestAnimationFrame(() => {
+            // Add a small delay to ensure DOM is fully rendered
+            setTimeout(() => {
+              resolve();
+            }, 500);
+          });
+        }, 0);
+      });
+
+      // Ensure report element exists
+      if (!screenReportRef.current) {
+        throw new Error('Report layout not ready');
+      }
+
+      setProgress(50);
+      setProgressText('Preparing PDF generation...');
+
+      // Apply styles for PDF generation
+      const style = document.createElement('style');
+      style.innerHTML = `
+        th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Generate high-quality canvas
+      const canvas = await html2canvas(screenReportRef.current, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: screenReportRef.current.offsetWidth,
+        height: screenReportRef.current.offsetHeight
+      });
+
+      setProgress(70);
+      setProgressText('Converting to PDF format...');
+
+      try {
+        // Create PDF
+        const pdf = new jsPDF({
+          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4',
+          compress: true
         });
 
-      if (error) throw new Error(error.message);
+        // Get header section and convert to image
+        const screenHeaderSection = screenReportRef.current?.querySelector('.flex.justify-between');
+        if (!screenHeaderSection) throw new Error('Screen header section not found');
 
-      setScreenPerformanceData(data || []);
+        // Convert header section to image
+        const screenHeaderCanvas = await html2canvas(screenHeaderSection as HTMLElement, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
 
-      // Generate PDF after a short delay
-      setTimeout(() => {
-        if (screenReportRef.current) {
-          html2canvas(screenReportRef.current).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`screen-performance-${dayjs().format('YYYY-MM-DD')}.pdf`);
-          });
-        }
-      }, 500);
+        // Add header image to PDF
+        const screenPdfWidth = pdf.internal.pageSize.getWidth();
+        const screenMargin = 10;
+        const screenContentWidth = screenPdfWidth - (screenMargin * 2);
+        const screenHeaderHeight = (screenHeaderCanvas.height * screenContentWidth) / screenHeaderCanvas.width;
+        const screenHeaderImgData = screenHeaderCanvas.toDataURL('image/jpeg', 1.0);
+        pdf.addImage(screenHeaderImgData, 'JPEG', screenMargin, screenMargin, screenContentWidth, screenHeaderHeight);
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while generating the screen report');
+        // Add table using autoTable
+        pdf.autoTable({
+          startY: screenHeaderHeight + screenMargin + 10,
+          head: [
+            [
+              'Screen Name',
+              'Location',
+              'Start Time',
+              'End Time',
+              'Screen Time(Expected)',
+              'Screen Time(Average)',
+              'Average'
+            ]
+          ],
+          body: data.map((screen: ScreenPerformance) => [
+            screen.screen_name,
+            screen.screen_location,
+            screen.start_time,
+            screen.end_time,
+            screen.expected_screentime.toFixed(2),
+            screen.average_screentime.toFixed(2),
+            `${screen.performance.toFixed(2)}%`
+          ]),
+          theme: 'grid',
+          headStyles: {
+            fillColor: [0, 0, 0],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center'
+          },
+          styles: {
+            fontSize: 10,
+            cellPadding: 5
+          },
+          columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 'auto' },
+            3: { cellWidth: 'auto' },
+            4: { cellWidth: 'auto', halign: 'right' },
+            5: { cellWidth: 'auto', halign: 'right' },
+            6: { cellWidth: 'auto', halign: 'right' }
+          },
+          didDrawPage: (pageInfo: any) => {
+            if (pageInfo.pageNumber > 1) {
+              pageInfo.settings.startY = screenMargin;
+            }
+          },
+          showHead: 'everyPage',
+          margin: { top: screenMargin, right: screenMargin, bottom: screenMargin, left: screenMargin }
+        });
+
+        // Generate filename with timestamp
+        const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
+        const fileName = `screen-performance-${timestamp}.pdf`;
+
+        setProgress(90);
+        setProgressText('Finalizing report...');
+
+        // Save PDF and clean up
+        pdf.save(fileName);
+        document.head.removeChild(style);
+
+        setProgress(100);
+        setProgressText('Report downloaded successfully!');
+
+        // Show success message
+        Swal.fire({
+          title: 'Success!',
+          text: 'Report has been generated and downloaded',
+          icon: 'success'
+        });
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        throw new Error('Failed to generate PDF');
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate report');
+      console.error('Error generating screen report:', err);
       Swal.fire({
-        icon: 'error',
         title: 'Error',
-        text: err instanceof Error ? err.message : 'An error occurred while generating the screen report'
+        text: err.message || 'Failed to generate report',
+        icon: 'error'
       });
     } finally {
       setIsLoading(false);
+      setProgress(0);
+      setProgressText('');
     }
   };
 
   const handleGenerateScreenActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activityStartDate || !activityEndDate) return;
-
+    setError('');
+  
+    if (!validateScreenActivityInputs()) return;
+  
     try {
       setIsLoading(true);
-      setError(null);
-
-      let query = supabase
-        .from('screen_logs')
+      const { data, error } = await supabase
+        .from('activitylogs')
         .select(`
-          screens (
-            screenname
-          ),
           logheader,
           logtype,
-          logdatetime
+          logdatetime,
+          screens!inner (
+            screenname
+          )
         `)
+        .eq('screens.customerid', userDetails.customerId)
+        .eq('screens.isdeleted', false)
         .gte('logdatetime', activityStartDate)
         .lte('logdatetime', activityEndDate)
+        .eq(selectedScreen ? 'screenid' : '', selectedScreen || '')
         .order('logdatetime', { ascending: false });
-
-      if (selectedScreen) {
-        query = query.eq('screenid', selectedScreen);
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw new Error(error.message);
-      
-      // Transform the data to match ScreenActivity type
-      const transformedData: ScreenActivity[] = (data || []).map(item => {
-        // Ensure screens object exists and has the correct shape
-        const screenData = Array.isArray(item.screens) ? item.screens[0] : item.screens;
-        
-        return {
-          screens: {
-            screenname: String(screenData?.screenname || '')
-          },
-          logheader: String(item.logheader || ''),
-          logtype: String(item.logtype || ''),
-          logdatetime: String(item.logdatetime || '')
-        };
-      });
-
-      setScreenActivityData(transformedData);
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred while fetching screen activity');
+  
+      if (error) throw error;
+      setScreenActivityData(data || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch activity data');
+      console.error('Error generating screen activity report:', err);
       Swal.fire({
-        icon: 'error',
         title: 'Error',
-        text: err instanceof Error ? err.message : 'An error occurred while fetching screen activity'
+        text: err.message || 'Failed to generate report',
+        icon: 'error'
       });
     } finally {
       setIsLoading(false);
     }
   };
-
-
+  
   return (
     <LoadingOverlay active={isLoading}>
       <div className="bg-white rounded-lg shadow p-6">
@@ -293,6 +632,7 @@ export default function ReportsPage() {
         </p>
 
         <div className="space-y-6">
+
           {/* Campaign Performance Section */}
           <div className="border rounded-lg p-6">
             <h3 className="font-medium text-gray-900 mb-4">Campaign Performance</h3>
@@ -376,8 +716,8 @@ export default function ReportsPage() {
                 {isLoading ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Generating...
                   </>
@@ -434,8 +774,8 @@ export default function ReportsPage() {
                 {isLoading ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Generating...
                   </>
@@ -517,9 +857,9 @@ export default function ReportsPage() {
               {/* Generate Report Button */}
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={!activityStartDate || !activityEndDate || isLoading}
                 className={`w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white
-                  ${isLoading
+                  ${!activityStartDate || !activityEndDate || isLoading
                     ? 'bg-gray-300 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
                   }`}
@@ -527,8 +867,8 @@ export default function ReportsPage() {
                 {isLoading ? (
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Generating...
                   </>
@@ -536,44 +876,16 @@ export default function ReportsPage() {
               </button>
             </form>
 
-            {/* Activity Results Table */}
-            {screenActivityData.length > 0 && (
-              <div className="mt-6 overflow-x-auto">
-                <table className="min-w-full">
-                  <thead className="bg-black text-white">
-                    <tr>
-                      <th className="px-4 py-2 text-left">Screen Name</th>
-                      <th className="px-4 py-2 text-left">Log Header</th>
-                      <th className="px-4 py-2 text-left">Log Type</th>
-                      <th className="px-4 py-2 text-left">Date/Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {screenActivityData.map((activity, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                        <td className="px-4 py-2 border">{activity.screens.screenname}</td>
-                        <td className="px-4 py-2 border">{activity.logheader}</td>
-                        <td className="px-4 py-2 border">{activity.logtype}</td>
-                        <td className="px-4 py-2 border">
-                          {dayjs(activity.logdatetime).format('DD-MM-YYYY HH:mm:ss')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
         </div>
 
         {reportData && (
-          <div ref={reportRef}>
-            <ReportPreview
-              data={reportData}
-              startDate={reportStartDate}
-              endDate={reportEndDate}
-            />
-          </div>
+          <ReportPreview
+            ref={reportRef}
+            data={reportData}
+            startDate={campaignStartDate}
+            endDate={campaignEndDate}
+          />
         )}
 
         {screenPerformanceData && (
@@ -611,6 +923,34 @@ export default function ReportsPage() {
                     <td className="px-4 py-2 border text-right">{screen.expected_screentime.toFixed(2)}</td>
                     <td className="px-4 py-2 border text-right">{screen.average_screentime.toFixed(2)}</td>
                     <td className="px-4 py-2 border text-right">{screen.performance.toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Results Table */}
+        {screenActivityData.length > 0 && (
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-black text-white">
+                <tr>
+                  <th className="px-4 py-2 text-left">Screen Name</th>
+                  <th className="px-4 py-2 text-left">Log Header</th>
+                  <th className="px-4 py-2 text-left">Log Type</th>
+                  <th className="px-4 py-2 text-left">Date/Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {screenActivityData.map((activity, index) => (
+                  <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                    <td className="px-4 py-2 border">{activity.screens.screenname}</td>
+                    <td className="px-4 py-2 border">{activity.logheader}</td>
+                    <td className="px-4 py-2 border">{activity.logtype}</td>
+                    <td className="px-4 py-2 border">
+                      {dayjs(activity.logdatetime).format('DD-MM-YYYY HH:mm:ss')}
+                    </td>
                   </tr>
                 ))}
               </tbody>

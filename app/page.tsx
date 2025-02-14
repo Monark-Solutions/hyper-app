@@ -1,5 +1,6 @@
 "use client";
 import Link from 'next/link'
+import { getAppVersion } from '@/utils/version'
 import { useState } from 'react';
 import Image from 'next/image';
 import Swal from 'sweetalert2';
@@ -207,6 +208,11 @@ export default function Home() {
             </Link>
           </div>
         </form>
+        
+        {/* Version Display */}
+        <div className="text-center mt-4 text-xs text-gray-400">
+          Version {getAppVersion()}
+        </div>
       </div>
     </main>
   )
