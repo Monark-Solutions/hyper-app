@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import supabase from '@/lib/supabase';
 import { hashPassword, comparePasswords } from '@/utils/password';
 import Swal from 'sweetalert2';
 import Link from 'next/link';
 import Image from 'next/image';
+import LoadingOverlay from '@/components/LoadingOverlay';
 import { 
   RiDashboardLine, 
   RiMovie2Line, 
@@ -317,12 +318,12 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
             <div className="flex items-center">
               <Link href="/dashboard" className="flex-shrink-0">
                 <Image 
-                          src="/logo.svg"
-                          alt="Company Logo"
-                          width={150}
-                          height={50}
-                          className="logo"
-                        />
+                  src="/logo.svg"
+                  alt="Company Logo"
+                  width={150}
+                  height={50}
+                  className="logo"
+                />
               </Link>
             </div>
 
@@ -335,6 +336,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                   <Link
                     key={item.name}
                     href={item.path}
+                    prefetch={true}
                     onClick={() => handleNavigation(item.path)}
                     className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150 ease-in-out
                       ${isActive 
@@ -418,6 +420,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
                   <Link
                     key={item.name}
                     href={item.path}
+                    prefetch={true}
                     onClick={() => handleNavigation(item.path)}
                     className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150 ease-in-out
                       ${isActive 
@@ -436,7 +439,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
       </header>
 
       <main className="max-w-7xl mx-auto pt-20 p-4 sm:px-6 lg:px-8">
-        {children}
+        <Suspense fallback={<LoadingOverlay />}>
+          {children}
+        </Suspense>
       </main>
 
       {/* Profile Drawer */}
