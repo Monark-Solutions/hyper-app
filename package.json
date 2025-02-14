@@ -14,7 +14,6 @@
     "@tailwindcss/aspect-ratio": "^0.4.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/react-map-gl": "^6.1.7",
-    "@types/xlsx": "^0.0.36",
     "bcryptjs": "^2.4.3",
     "dayjs": "^1.11.13",
     "generate-password": "^1.7.1",

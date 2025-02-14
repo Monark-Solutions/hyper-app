@@ -29,8 +29,19 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- npm run build
+- Copy .next, components, lib, public, types, utils, package.json, package-lock.json, server.js and service.js files on the production server
+- go to the production folder and run following commands;
+  - npm install
+  - npm install node-windows
+  - Check File and Directory Permissions
+    -   Ensure Node.js has permissions to read/write files and create directories in the project directory:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+    -   Right-click your project folder (C:\Users\Administrator\Documents\hyper-app).
+    -   Go to Properties > Security.
+    -   Ensure your user (Administrator) and the system account have Full Control.
+  - Install service by executing node service.js
+  - Check the service running or not
+  - type http://localhost:3000
