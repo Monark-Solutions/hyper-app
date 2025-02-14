@@ -986,7 +986,7 @@ export default function Screens(): React.ReactElement {
                                         campaign.state === 'Completed' 
                                           ? 'bg-green-600' 
                                           : campaign.state === 'Active' 
-                                            ? 'bg-blue-650' 
+                                          ? campaign.playstate === false ? 'bg-yellow-600 bg-opacity-40' : 'bg-blue-650' 
                                             : 'bg-gray-400'
                                       }`} 
                                       style={{ width: `${campaign.progress}%` }}

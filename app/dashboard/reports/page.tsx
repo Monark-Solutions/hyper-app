@@ -591,6 +591,10 @@ export default function Reports() {
   
     try {
       setIsLoading(true);
+      const startDate = new Date(activityStartDate);
+      const endDate = new Date(activityEndDate);
+      startDate.setHours(0,0,0,0);
+      endDate.setHours(23, 59, 59, 999);
       const { data, error } = await supabase
         .from('activitylogs')
         .select(`
@@ -603,8 +607,8 @@ export default function Reports() {
         `)
         .eq('screens.customerid', userDetails.customerId)
         .eq('screens.isdeleted', false)
-        .gte('logdatetime', activityStartDate)
-        .lte('logdatetime', activityEndDate)
+        .gte('logdatetime', startDate.toISOString())
+        .lte('logdatetime', endDate.toISOString())
         .eq(selectedScreen ? 'screenid' : '', selectedScreen || '')
         .order('logdatetime', { ascending: false });
   
