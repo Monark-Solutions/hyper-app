@@ -70,7 +70,7 @@ export default function Reports() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [screenPerformanceData, setScreenPerformanceData] = useState<ScreenPerformance[] | null>(null);
   const [userDetails, setUserDetails] = useState<any>(null);
-  const screenReportRef = useRef<HTMLDivElement>(null);
+const screenReportRef = useRef<HTMLDivElement>(null);
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
   const [selectedScreen, setSelectedScreen] = useState<string>('');
   const [screenActivityData, setScreenActivityData] = useState<any[]>([]);
@@ -88,6 +88,13 @@ export default function Reports() {
     // Cleanup function
     return () => {
       hasFetchedRef.current = false;
+      // Clear all report states on unmount
+      setReportData(null);
+      setScreenPerformanceData(null);
+      setScreenActivityData([]);
+      // Remove any PDF styles that might be left in document head
+      const pdfStyles = document.head.querySelectorAll('style[data-pdf-styles]');
+      pdfStyles.forEach(style => style.remove());
     };
   }, [router]);
 
@@ -192,6 +199,10 @@ export default function Reports() {
     setError('');
     setProgress(0);
     setProgressText('');
+    // Reset all report states
+    setReportData(null);
+    setScreenPerformanceData(null);
+    setScreenActivityData([]);
 
     if (!validateReportInputs()) return;
 
@@ -217,8 +228,16 @@ export default function Reports() {
       setProgress(30);
       setProgressText('Preparing report layout...');
 
-      // Wait for next render cycle and ensure reportData is set
-      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      // Wait for DOM to update with report data
+      await new Promise<void>(resolve => {
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              resolve();
+            }, 500);
+          });
+        }, 0);
+      });
 
       // Ensure report element exists
       if (!reportRef.current) {
@@ -241,6 +260,7 @@ export default function Reports() {
 
       // Apply styles for PDF generation
       const style = document.createElement('style');
+      style.setAttribute('data-pdf-styles', 'true');
       style.innerHTML = `
         th {
           background-color: #000000 !important;
@@ -391,6 +411,10 @@ export default function Reports() {
     setError('');
     setProgress(0);
     setProgressText('');
+    // Reset all report states
+    setReportData(null);
+    setScreenPerformanceData(null);
+    setScreenActivityData([]);
 
     if (!validateScreenReportInputs()) return;
 
@@ -437,6 +461,7 @@ export default function Reports() {
 
       // Apply styles for PDF generation
       const style = document.createElement('style');
+      style.setAttribute('data-pdf-styles', 'true');
       style.innerHTML = `
         th {
           background-color: #000000 !important;
@@ -586,6 +611,10 @@ export default function Reports() {
   const handleGenerateScreenActivity = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    // Reset all report states
+    setReportData(null);
+    setScreenPerformanceData(null);
+    setScreenActivityData([]);
   
     if (!validateScreenActivityInputs()) return;
   
@@ -883,18 +912,20 @@ export default function Reports() {
           </div>
         </div>
 
-        {reportData && (
-          <ReportPreview
-            ref={reportRef}
-            data={reportData}
-            startDate={campaignStartDate}
-            endDate={campaignEndDate}
-          />
-        )}
+        {/* Reports Container */}
+        <div className="mt-6">
+          {reportData && (
+            <ReportPreview
+              ref={reportRef}
+              data={reportData}
+              startDate={campaignStartDate}
+              endDate={campaignEndDate}
+            />
+          )}
 
-        {screenPerformanceData && (
-          <div ref={screenReportRef} className="mt-6">
-            <div className="flex justify-between items-start mb-4">
+          {screenPerformanceData && (
+            <div ref={screenReportRef}>
+              <div className="flex justify-between items-start mb-4">
               <div className="text-4xl font-bold">HYPER</div>
               <div className="text-right">
                 <h2 className="text-3xl font-bold mb-2">Screen Performance</h2>
@@ -934,9 +965,9 @@ export default function Reports() {
           </div>
         )}
 
-        {/* Results Table */}
-        {screenActivityData.length > 0 && (
-          <div className="mt-6 overflow-x-auto">
+          {/* Results Table */}
+          {screenActivityData.length > 0 && (
+            <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-black text-white">
                 <tr>
@@ -959,8 +990,9 @@ export default function Reports() {
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </LoadingOverlay>
   );
