@@ -218,7 +218,7 @@ export default function Media() {
         const { data, error } = await supabase
           .from('tags')
           .insert([{ customerid: customerId, tagname: newTag }])
-          .select();
+          .select().order('tagname',{ascending: true});
 
         if (!error && data) {
           setTags([...tags, data[0]]);
@@ -361,7 +361,7 @@ export default function Media() {
       .from('tags')
       .select('*')
       .eq('customerid', customerId)
-      .eq('isdeleted',false);
+      .eq('isdeleted',false).order('tagname',{ascending: true});
 
     if (!error && tags) {
       setTags(tags);
@@ -409,7 +409,7 @@ export default function Media() {
         .from('tags')
         .select('tagid')
         .eq('customerid', customerId)
-        .or(terms.map(term => `tagname.ilike.%${term}%`).join(','));
+        .or(terms.map(term => `tagname.ilike.%${term}%`).join(',')).order('tagname',{ascending: true});
 
       if (matchingTags && matchingTags.length > 0) {
         const { data: taggedMedia } = await supabase
@@ -566,7 +566,7 @@ export default function Media() {
         const { data, error } = await supabase
           .from('tags')
           .insert([{ customerid: customerId, tagname: propertyNewTag }])
-          .select();
+          .select().order('tagname',{ascending: true});
 
         if (!error && data) {
           setTags([...tags, data[0]]);
@@ -1038,7 +1038,7 @@ export default function Media() {
                             const { data, error } = await supabase
                               .from('tags')
                               .insert([{ customerid: customerId, tagname: inputValue }])
-                              .select();
+                              .select().order('tagname',{ascending: true});
 
                             if (!error && data) {
                               const newTag = data[0];

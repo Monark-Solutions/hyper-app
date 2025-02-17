@@ -213,7 +213,8 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
       .from('media')
       .select('mediaid, medianame, customerid, isdeleted')
       .eq('customerid', customerId)
-      .eq('isdeleted', false);
+      .eq('isdeleted', false)
+      .order('medianame',{ascending: true});
 
     if (error) {
       console.error('Error fetching media:', error);
@@ -872,7 +873,22 @@ export default function CampaignForm({ campaignId, mediaId }: CampaignFormProps)
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {currentScreens.map((screen) => (
-                      <tr key={screen.screenid} className="hover:bg-gray-50">
+                      <tr 
+                        key={screen.screenid} 
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={(e) => {
+                          // Don't trigger row click when clicking checkbox
+                          if ((e.target as HTMLElement).tagName === 'INPUT') return;
+                          
+                          if (map.current && screen.latitude && screen.longitude) {
+                            map.current.flyTo({
+                              center: [screen.longitude, screen.latitude],
+                              zoom: 14,
+                              duration: 1500
+                            });
+                          }
+                        }}
+                      >
                         <td className="px-2 md:px-6 py-2 md:py-4">
                           <input
                             type="checkbox"

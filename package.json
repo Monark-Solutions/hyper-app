@@ -1,6 +1,6 @@
 {
   "name": "hyper-app",
-  "version": "9.5.9",
+  "version": "9.6.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
