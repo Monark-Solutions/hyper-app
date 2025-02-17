@@ -1,7 +1,6 @@
 export interface Campaign {
   campaignid: number;
   campaignname: string;
-  mediaid: number;
   startdate: string;
   enddate: string;
   customerid: string;
@@ -13,6 +12,15 @@ export interface Campaign {
 export interface CampaignFormProps {
   campaignId: number;
   mediaId: number;
+  isSaving?: boolean;
+  setIsSaving?: (saving: boolean) => void;
+  setIsDrawerOpen: (open: boolean) => void;
+}
+
+export interface CampaignMedia {
+  campaignid: number;
+  mediaid: number;
+  isdeleted: boolean;
 }
 
 export interface CampaignScreen {

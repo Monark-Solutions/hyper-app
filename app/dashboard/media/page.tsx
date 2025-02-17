@@ -13,6 +13,10 @@ import CampaignForm from '@/components/CampaignForm';
 import type { Campaign } from '@/types/campaign';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 interface Tag {
   tagid: number;
@@ -53,6 +57,7 @@ export default function Media() {
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [isPropertiesDrawerOpen, setIsPropertiesDrawerOpen] = useState(false);
   const [isCampaignDrawerOpen, setIsCampaignDrawerOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'campaigns'>('properties');
   const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
@@ -467,10 +472,10 @@ export default function Media() {
     const { customerId } = JSON.parse(userDetails);
     const { data, error } = await supabase
       .from('campaigns')
-      .select('*')
+      .select('*, campaignmedia!inner(*)')
       .eq('customerid', customerId)
-      .eq('mediaid', mediaid)
       .eq('isdeleted', false)
+      .eq('campaignmedia.mediaid', mediaid)
       .order('startdate', { ascending: false });
 
     if (error) {
@@ -478,52 +483,47 @@ export default function Media() {
       return;
     }
 
-    const currentDate = new Date();
-    const currentDateStr = currentDate.toISOString().split('T')[0];
-
     const processedCampaigns = data.map(campaign => {
-      const startDate = new Date(campaign.startdate);
-      const endDate = new Date(campaign.enddate);
-      const startDateStr = startDate.toISOString().split('T')[0];
-      const endDateStr = endDate.toISOString().split('T')[0];
+      const currentDate = dayjs();
+      const startDate = dayjs(campaign.startdate);
+      const endDate = dayjs(campaign.enddate);
       
       let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
       let progress = 0;
       let timeText = '';
 
-      // Determine state and progress
-      if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
+      if (currentDate.isAfter(startDate) && currentDate.isBefore(endDate) || currentDate.isSame(startDate) || currentDate.isSame(endDate)) { // Check if currentDate is between or equal to startDate and endDate
         state = 'Active';
-        const totalDuration = endDate.getTime() - startDate.getTime();
-        const elapsed = currentDate.getTime() - startDate.getTime();
+        const totalDuration = endDate.diff(startDate);
+        const elapsed = currentDate.diff(startDate);
         progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
-
-        if (isSameDay(currentDate, startDate)) {
+      
+        if (currentDate.isSame(startDate, 'day')) {
           timeText = 'Started Today';
         } else {
-          timeText = `Started ${formatTimeAgo(startDate)} ago`;
+          timeText = `Started ${startDate.fromNow()}`;
         }
-
-        if (isSameDay(currentDate, endDate)) {
+      
+        if (currentDate.isSame(endDate, 'day')) {
           timeText = 'Will End Today';
         }
-      } else if (currentDateStr < startDateStr) {
+      } else if (currentDate.isBefore(startDate)) {
         state = 'Scheduled';
         progress = 0;
-
-        if (isSameDay(currentDate, startDate)) {
+      
+        if (currentDate.isSame(startDate, 'day')) {
           timeText = 'Starts Today';
         } else {
-          timeText = `Starts in ${formatTimeAgo(startDate)}`;
+          timeText = `Starts in ${startDate.fromNow()}`;
         }
-      } else if (currentDateStr > endDateStr) {
+      } else if (currentDate.isAfter(endDate)) {
         state = 'Completed';
         progress = 100;
-
-        if (isSameDay(currentDate, endDate)) {
+      
+        if (currentDate.isSame(endDate, 'day')) {
           timeText = 'Ended Today';
         } else {
-          timeText = `Ended ${formatTimeAgo(endDate)} ago`;
+          timeText = `Ended ${endDate.fromNow()}`;
         }
       }
 
@@ -1393,7 +1393,10 @@ export default function Media() {
                   <div className="px-6 py-2">
                     <CampaignForm 
                       campaignId={editCampaignId} 
-                      mediaId={selectedMediaItem?.mediaid || 0} 
+                      mediaId={selectedMediaItem?.mediaid || 0}
+                      setIsDrawerOpen={setIsCampaignDrawerOpen}
+                      isSaving={isSaving}
+                      setIsSaving={setIsSaving}
                     />
                   </div>
                 </div>
@@ -1415,9 +1418,12 @@ export default function Media() {
                     <button
                       type="submit"
                       form="campaign-form"
+                      disabled={isSaving}
                       className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
-                      {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
+                      {isSaving 
+                        ? (editCampaignId ? 'Updating...' : 'Creating...') 
+                        : (editCampaignId ? 'Update Campaign' : 'Create Campaign')}
                     </button>
                   </div>
                 </div>

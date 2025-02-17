@@ -20,14 +20,17 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
               <span className="text-6xl font-black text-black tracking-wider">HYPER</span>
             </td>
             <td rowSpan={2} className="align-top w-1/2">
-              <div className="w-[450px] h-[150px] relative">
-                <Image
-                  src={`data:image/jpeg;base64,${data.thumbnail}`}
-                  alt="Campaign Thumbnail"
-                  fill
-                  className="object-contain rounded-lg"
-                />
-              </div>
+              
+                <div className="w-[450px] h-[150px] relative">
+                {data.thumbnail && (
+                  <Image
+                    src={`data:image/jpeg;base64,${data.thumbnail}`}
+                    alt="Campaign Thumbnail"
+                    fill
+                    className="object-contain rounded-lg"
+                  />
+                )}
+                </div>
             </td>
           </tr>
           <tr>

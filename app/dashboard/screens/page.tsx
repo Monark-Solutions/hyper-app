@@ -9,6 +9,10 @@ import CreatableSelect from 'react-select/creatable';
 import Select from 'react-select';
 import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 interface ScreenDetails {
   screenid: string;
@@ -67,52 +71,49 @@ const isSameDay = (date1: Date, date2: Date) => {
 };
 
 const processedCampaigns = (campaigns: Campaign[]): CampaignWithState[] => {
-  const currentDate = new Date();
-  const currentDateStr = currentDate.toISOString().split('T')[0];
+  const currentDate = dayjs();
 
   return campaigns.map(campaign => {
-    const startDate = new Date(campaign.startdate);
-    const endDate = new Date(campaign.enddate);
-    const startDateStr = startDate.toISOString().split('T')[0];
-    const endDateStr = endDate.toISOString().split('T')[0];
+    const startDate = dayjs(campaign.startdate);
+    const endDate = dayjs(campaign.enddate);
     
     let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
     let progress = 0;
     let timeText = '';
 
     // Determine state and progress
-    if (currentDateStr >= startDateStr && currentDateStr <= endDateStr) {
+    if (currentDate.isAfter(startDate) && currentDate.isBefore(endDate) || currentDate.isSame(startDate) || currentDate.isSame(endDate)) { // Check if currentDate is between or equal to startDate and endDate
       state = 'Active';
-      const totalDuration = endDate.getTime() - startDate.getTime();
-      const elapsed = currentDate.getTime() - startDate.getTime();
+      const totalDuration = endDate.diff(startDate);
+      const elapsed = currentDate.diff(startDate);
       progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
-
-      if (isSameDay(currentDate, startDate)) {
+    
+      if (currentDate.isSame(startDate, 'day')) {
         timeText = 'Started Today';
       } else {
-        timeText = `Started ${formatTimeAgo(startDate)} ago`;
+        timeText = `Started ${startDate.fromNow()}`;
       }
-
-      if (isSameDay(currentDate, endDate)) {
+    
+      if (currentDate.isSame(endDate, 'day')) {
         timeText = 'Will End Today';
       }
-    } else if (currentDateStr < startDateStr) {
+    } else if (currentDate.isBefore(startDate)) {
       state = 'Scheduled';
       progress = 0;
-
-      if (isSameDay(currentDate, startDate)) {
+    
+      if (currentDate.isSame(startDate, 'day')) {
         timeText = 'Starts Today';
       } else {
-        timeText = `Starts in ${formatTimeAgo(startDate)}`;
+        timeText = `Starts in ${startDate.fromNow()}`;
       }
-    } else if (currentDateStr > endDateStr) {
+    } else if (currentDate.isAfter(endDate)) {
       state = 'Completed';
       progress = 100;
-
-      if (isSameDay(currentDate, endDate)) {
+    
+      if (currentDate.isSame(endDate, 'day')) {
         timeText = 'Ended Today';
       } else {
-        timeText = `Ended ${formatTimeAgo(endDate)} ago`;
+        timeText = `Ended ${endDate.fromNow()}`;
       }
     }
 

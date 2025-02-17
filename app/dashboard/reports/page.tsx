@@ -34,6 +34,11 @@ interface ScreenOption {
   label: string;
 }
 
+interface MediaFile {
+  mediaid: number;
+  medianame: string;
+}
+
 interface ScreenActivity {
   screenname: string;
   logheader: string;
@@ -51,6 +56,8 @@ declare module 'jspdf' {
 export default function Reports() {
   const router = useRouter();
   const [selectedCampaign, setSelectedCampaign] = useState<string>('');
+  const [selectedMedia, setSelectedMedia] = useState<string>('');
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   // Campaign Performance dates
   const [campaignStartDate, setCampaignStartDate] = useState<string>('');
   const [campaignEndDate, setCampaignEndDate] = useState<string>('');
@@ -70,7 +77,7 @@ export default function Reports() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [screenPerformanceData, setScreenPerformanceData] = useState<ScreenPerformance[] | null>(null);
   const [userDetails, setUserDetails] = useState<any>(null);
-const screenReportRef = useRef<HTMLDivElement>(null);
+  const screenReportRef = useRef<HTMLDivElement>(null);
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
   const [selectedScreen, setSelectedScreen] = useState<string>('');
   const [screenActivityData, setScreenActivityData] = useState<any[]>([]);
@@ -106,6 +113,38 @@ const screenReportRef = useRef<HTMLDivElement>(null);
       fetchScreens();
     }
   }, [userDetails]); // Add userDetails as dependency
+
+  const fetchMediaFiles = async (campaignId: string) => {
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('campaignmedia')
+        .select(`
+          media:mediaid (
+            mediaid,
+            medianame
+          )
+        `)
+        .eq('campaignid', campaignId);
+
+      if (error) throw error;
+      
+      // Transform the data to match MediaFile interface
+      const transformedData: MediaFile[] = data
+        .filter((item: any) => item.media)
+        .map((item: any) => ({
+          mediaid: item.media.mediaid,
+          medianame: item.media.medianame
+        }));
+      
+      setMediaFiles(transformedData);
+    } catch (err) {
+      console.error('Error fetching media files:', err);
+      setError('Failed to fetch media files');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchCampaigns = async () => {
     try {
@@ -214,6 +253,7 @@ const screenReportRef = useRef<HTMLDivElement>(null);
       // Fetch campaign data
       const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
         _campaignid: selectedCampaign,
+        _mediaid: selectedMedia ? parseInt(selectedMedia, 10) : 0,
         _startdate: campaignStartDate,
         _enddate: campaignEndDate
       });
@@ -248,12 +288,14 @@ const screenReportRef = useRef<HTMLDivElement>(null);
       setProgressText('Loading campaign image...');
 
       // Pre-load image
-      const tempImg = document.createElement('img');
-      await new Promise<void>((resolve, reject) => {
-        tempImg.onload = () => resolve();
-        tempImg.onerror = () => reject(new Error('Failed to load image'));
-        tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
-      });
+      if(data[0].thumbnail.isEmpty == false){
+        const tempImg = document.createElement('img');
+        await new Promise<void>((resolve, reject) => {
+          tempImg.onload = () => resolve();
+          tempImg.onerror = () => reject(new Error('Failed to load image'));
+          tempImg.src = `data:image/jpeg;base64,${data[0].thumbnail}`;
+        });
+      }
 
       setProgress(50);
       setProgressText('Preparing PDF generation...');
@@ -665,7 +707,6 @@ const screenReportRef = useRef<HTMLDivElement>(null);
         </p>
 
         <div className="space-y-6">
-
           {/* Campaign Performance Section */}
           <div className="border rounded-lg p-6">
             <h3 className="font-medium text-gray-900 mb-4">Campaign Performance</h3>
@@ -685,7 +726,14 @@ const screenReportRef = useRef<HTMLDivElement>(null);
                 <Select<SelectOption>
                   id="campaign"
                   value={selectedCampaign ? { value: selectedCampaign, label: campaigns.find(c => String(c.campaignid) === selectedCampaign)?.campaignname || '' } : null}
-                  onChange={(newValue: SingleValue<SelectOption>) => setSelectedCampaign(newValue?.value || '')}
+                  onChange={(newValue: SingleValue<SelectOption>) => {
+                    setSelectedCampaign(newValue?.value || '');
+                    setSelectedMedia('');
+                    setMediaFiles([]);
+                    if (newValue?.value) {
+                      fetchMediaFiles(newValue.value);
+                    }
+                  }}
                   options={campaigns.map(campaign => ({
                     value: String(campaign.campaignid),
                     label: campaign.campaignname || ''
@@ -694,6 +742,35 @@ const screenReportRef = useRef<HTMLDivElement>(null);
                   isClearable={true}
                   isSearchable={true}
                   placeholder="Choose a campaign"
+                  className="mt-1"
+                  classNames={{
+                    control: (state) => 
+                      `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                    input: () => "!text-sm",
+                    option: () => "!text-sm",
+                    placeholder: () => "!text-sm !text-slate-400",
+                    singleValue: () => "!text-sm"
+                  }}
+                />
+              </div>
+
+              {/* Media Selection */}
+              <div>
+                <label htmlFor="media" className="block text-sm font-medium text-gray-700">
+                  Select Media File (Optional)
+                </label>
+                <Select<SelectOption>
+                  id="media"
+                  value={selectedMedia ? { value: selectedMedia, label: mediaFiles.find(m => String(m.mediaid) === selectedMedia)?.medianame || '' } : null}
+                  onChange={(newValue: SingleValue<SelectOption>) => setSelectedMedia(newValue?.value || '')}
+                  options={mediaFiles.map(media => ({
+                    value: String(media.mediaid),
+                    label: media.medianame || ''
+                  }))}
+                  isDisabled={isLoading || !selectedCampaign}
+                  isClearable={true}
+                  isSearchable={true}
+                  placeholder="Choose a media file"
                   className="mt-1"
                   classNames={{
                     control: (state) => 
@@ -908,7 +985,6 @@ const screenReportRef = useRef<HTMLDivElement>(null);
                 ) : 'Generate Report'}
               </button>
             </form>
-
           </div>
         </div>
 
@@ -926,70 +1002,70 @@ const screenReportRef = useRef<HTMLDivElement>(null);
           {screenPerformanceData && (
             <div ref={screenReportRef}>
               <div className="flex justify-between items-start mb-4">
-              <div className="text-4xl font-bold">HYPER</div>
-              <div className="text-right">
-                <h2 className="text-3xl font-bold mb-2">Screen Performance</h2>
-                <p className="text-gray-600">Report Dates {dayjs(screenStartDate).format('DD-MM-YYYY')} - {dayjs(screenEndDate).format('DD-MM-YYYY')}</p>
+                <div className="text-4xl font-bold">HYPER</div>
+                <div className="text-right">
+                  <h2 className="text-3xl font-bold mb-2">Screen Performance</h2>
+                  <p className="text-gray-600">Report Dates {dayjs(screenStartDate).format('DD-MM-YYYY')} - {dayjs(screenEndDate).format('DD-MM-YYYY')}</p>
+                </div>
               </div>
-            </div>
             
-            <table className="min-w-full mt-6">
-              <thead className="bg-black text-white">
-                <tr>
-                  <th className="px-4 py-2 text-left" rowSpan={2}>Screen Name</th>
-                  <th className="px-4 py-2 text-left" rowSpan={2}>Location</th>
-                  <th className="px-4 py-2 text-left" rowSpan={2}>Start Time</th>
-                  <th className="px-4 py-2 text-left" rowSpan={2}>End Time</th>
-                  <th className="px-4 py-2 text-center" colSpan={2}>Screen Time</th>
-                  <th className="px-4 py-2 text-right" rowSpan={2}>Performance %</th>
-                </tr>
-                <tr>
-                  <th className="px-4 py-2 text-right">Expected</th>
-                  <th className="px-4 py-2 text-right">Average</th>
-                </tr>
-              </thead>
-              <tbody>
-                {screenPerformanceData.map((screen, index) => (
-                  <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-4 py-2 border">{screen.screen_name}</td>
-                    <td className="px-4 py-2 border">{screen.screen_location}</td>
-                    <td className="px-4 py-2 border">{screen.start_time}</td>
-                    <td className="px-4 py-2 border">{screen.end_time}</td>
-                    <td className="px-4 py-2 border text-right">{screen.expected_screentime.toFixed(2)}</td>
-                    <td className="px-4 py-2 border text-right">{screen.average_screentime.toFixed(2)}</td>
-                    <td className="px-4 py-2 border text-right">{screen.performance.toFixed(2)}%</td>
+              <table className="min-w-full mt-6">
+                <thead className="bg-black text-white">
+                  <tr>
+                    <th className="px-4 py-2 text-left" rowSpan={2}>Screen Name</th>
+                    <th className="px-4 py-2 text-left" rowSpan={2}>Location</th>
+                    <th className="px-4 py-2 text-left" rowSpan={2}>Start Time</th>
+                    <th className="px-4 py-2 text-left" rowSpan={2}>End Time</th>
+                    <th className="px-4 py-2 text-center" colSpan={2}>Screen Time</th>
+                    <th className="px-4 py-2 text-right" rowSpan={2}>Performance %</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  <tr>
+                    <th className="px-4 py-2 text-right">Expected</th>
+                    <th className="px-4 py-2 text-right">Average</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {screenPerformanceData.map((screen, index) => (
+                    <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-4 py-2 border">{screen.screen_name}</td>
+                      <td className="px-4 py-2 border">{screen.screen_location}</td>
+                      <td className="px-4 py-2 border">{screen.start_time}</td>
+                      <td className="px-4 py-2 border">{screen.end_time}</td>
+                      <td className="px-4 py-2 border text-right">{screen.expected_screentime.toFixed(2)}</td>
+                      <td className="px-4 py-2 border text-right">{screen.average_screentime.toFixed(2)}</td>
+                      <td className="px-4 py-2 border text-right">{screen.performance.toFixed(2)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Results Table */}
           {screenActivityData.length > 0 && (
             <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-black text-white">
-                <tr>
-                  <th className="px-4 py-2 text-left">Screen Name</th>
-                  <th className="px-4 py-2 text-left">Log Header</th>
-                  <th className="px-4 py-2 text-left">Log Type</th>
-                  <th className="px-4 py-2 text-left">Date/Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {screenActivityData.map((activity, index) => (
-                  <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                    <td className="px-4 py-2 border">{activity.screens.screenname}</td>
-                    <td className="px-4 py-2 border">{activity.logheader}</td>
-                    <td className="px-4 py-2 border">{activity.logtype}</td>
-                    <td className="px-4 py-2 border">
-                      {dayjs(activity.logdatetime).format('DD-MM-YYYY HH:mm:ss')}
-                    </td>
+              <table className="min-w-full">
+                <thead className="bg-black text-white">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Screen Name</th>
+                    <th className="px-4 py-2 text-left">Log Header</th>
+                    <th className="px-4 py-2 text-left">Log Type</th>
+                    <th className="px-4 py-2 text-left">Date/Time</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {screenActivityData.map((activity, index) => (
+                    <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                      <td className="px-4 py-2 border">{activity.screens.screenname}</td>
+                      <td className="px-4 py-2 border">{activity.logheader}</td>
+                      <td className="px-4 py-2 border">{activity.logtype}</td>
+                      <td className="px-4 py-2 border">
+                        {dayjs(activity.logdatetime).format('DD-MM-YYYY HH:mm:ss')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

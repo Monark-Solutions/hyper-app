@@ -298,9 +298,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
     { name: 'DASHBOARD', icon: RiDashboardLine, path: '/dashboard' },
     { name: 'MEDIA', icon: RiMovie2Line, path: '/dashboard/media' },
     { name: 'CAMPAIGN', icon: RiMegaphoneLine, path: '/dashboard/campaign' },
-    { name: 'SCREENS', icon: RiComputerLine, path: '/dashboard/screens' },
-    { name: 'REPORTS', icon: RiFileChartLine, path: '/dashboard/reports' },
-    { name: 'SETTINGS', icon: RiSettings4Line, path: '/dashboard/settings' },
+    { name: 'SCREEN', icon: RiComputerLine, path: '/dashboard/screens' },
+    { name: 'REPORT', icon: RiFileChartLine, path: '/dashboard/reports' },
+    { name: 'SETTING', icon: RiSettings4Line, path: '/dashboard/settings' },
   ];
 
   const handleNavigation = (path: string) => {

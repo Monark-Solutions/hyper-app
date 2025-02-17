@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { FiX, FiSearch } from 'react-icons/fi';
 import { BiEdit, BiBarChart, BiPlay, BiPause } from 'react-icons/bi';
@@ -21,6 +22,7 @@ dayjs.extend(relativeTime);
 const inputClasses = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
 
 export default function CampaignsPage() {
+  const router = useRouter();
   // State for campaign list and filtering
   const [campaigns, setCampaigns] = useState<(Campaign & { state: string; progress: number; timeText: string })[]>([]);
   const [selectedState, setSelectedState] = useState('all');
@@ -30,6 +32,7 @@ export default function CampaignsPage() {
   // State for campaign form drawer
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editCampaignId, setEditCampaignId] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
   // State for report drawer
   const [isReportDrawerOpen, setIsReportDrawerOpen] = useState(false);
@@ -41,43 +44,101 @@ export default function CampaignsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
+  const didFetch = useRef(false);
+
+  // Initial load with didFetch pattern
   useEffect(() => {
-    loadCampaigns();
+    if (didFetch.current) return;
+
+    const userDetailsStr = localStorage.getItem('userDetails');
+    if (!userDetailsStr) {
+      router.push('/');
+      return;
+    }
+
+    try {
+      const userDetails = JSON.parse(userDetailsStr);
+      if (!userDetails?.customerId) {
+        router.push('/');
+        return;
+      }
+
+      // Set flag before fetching to prevent duplicate calls
+      didFetch.current = true;
+      loadCampaigns(userDetails.customerId);
+    } catch (error) {
+      console.error('Error parsing user details:', error);
+      router.push('/');
+    }
+  }, [router]);
+
+  // Handle drawer close event
+  useEffect(() => {
+    const handleCloseDrawer = () => {
+      setIsDrawerOpen(false);
+      setEditCampaignId(0);
+      const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+      if (userDetails?.customerId) {
+        loadCampaigns(userDetails.customerId);
+      }
+    };
+    window.addEventListener('closeDrawer', handleCloseDrawer);
+    return () => window.removeEventListener('closeDrawer', handleCloseDrawer);
   }, []);
 
-  const loadCampaigns = async () => {
+  const loadCampaigns = async (customerId: string) => {
     try {
       const { data: campaignsData, error } = await supabase
         .from('campaigns')
         .select('*')
         .eq('isdeleted', false)
+        .eq('customerid', customerId)
         .order('campaignid', { ascending: false });
 
       if (error) throw error;
 
       const processedCampaigns = (campaignsData || []).map(campaign => {
-        const now = dayjs();
+        const currentDate = dayjs();
         const startDate = dayjs(campaign.startdate);
         const endDate = dayjs(campaign.enddate);
         
-        let state = 'Scheduled';
+        let state: 'Active' | 'Scheduled' | 'Completed' = 'Scheduled';
         let progress = 0;
         let timeText = '';
 
-        if (now.isAfter(endDate)) {
-          state = 'Completed';
-          progress = 100;
-          timeText = 'Ended ' + endDate.fromNow();
-        } else if (now.isBefore(startDate)) {
-          state = 'Scheduled';
-          progress = 0;
-          timeText = 'Starts ' + startDate.fromNow();
-        } else {
+        if (currentDate.isAfter(startDate) && currentDate.isBefore(endDate) || currentDate.isSame(startDate) || currentDate.isSame(endDate)) { // Check if currentDate is between or equal to startDate and endDate
           state = 'Active';
           const totalDuration = endDate.diff(startDate);
-          const elapsed = now.diff(startDate);
-          progress = Math.min(100, Math.round((elapsed / totalDuration) * 100));
-          timeText = 'Ends ' + endDate.fromNow();
+          const elapsed = currentDate.diff(startDate);
+          progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
+        
+          if (currentDate.isSame(startDate, 'day')) {
+            timeText = 'Started Today';
+          } else {
+            timeText = `Started ${startDate.fromNow()}`;
+          }
+        
+          if (currentDate.isSame(endDate, 'day')) {
+            timeText = 'Will End Today';
+          }
+        } else if (currentDate.isBefore(startDate)) {
+          state = 'Scheduled';
+          progress = 0;
+        
+          if (currentDate.isSame(startDate, 'day')) {
+            timeText = 'Starts Today';
+          } else {
+            timeText = `Starts in ${startDate.fromNow()}`;
+          }
+        } else if (currentDate.isAfter(endDate)) {
+          state = 'Completed';
+          progress = 100;
+        
+          if (currentDate.isSame(endDate, 'day')) {
+            timeText = 'Ended Today';
+          } else {
+            timeText = `Ended ${endDate.fromNow()}`;
+          }
         }
 
         return {
@@ -439,7 +500,13 @@ export default function CampaignsPage() {
                 </div>
                 <div className="flex-1 overflow-y-auto">
                   <div className="px-6 py-2 w-full h-full">
-                    <CampaignForm campaignId={editCampaignId} mediaId={0} />
+                    <CampaignForm 
+                      campaignId={editCampaignId} 
+                      mediaId={0} 
+                      setIsDrawerOpen={setIsDrawerOpen}
+                      isSaving={isSaving}
+                      setIsSaving={setIsSaving}
+                    />
                   </div>
                 </div>
                 <div className="flex-shrink-0 px-8 py-4 flex justify-end border-t border-gray-200 bg-white">
@@ -460,9 +527,12 @@ export default function CampaignsPage() {
                     <button
                       type="submit"
                       form="campaign-form"
-                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      disabled={isSaving}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {editCampaignId ? 'Update Campaign' : 'Create Campaign'}
+                      {isSaving 
+                        ? (editCampaignId ? 'Updating...' : 'Creating...') 
+                        : (editCampaignId ? 'Update Campaign' : 'Create Campaign')}
                     </button>
                   </div>
                 </div>
