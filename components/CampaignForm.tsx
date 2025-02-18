@@ -589,7 +589,7 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
         .neq('campaignid', campaignId || 0);
 
       if (campaignError) throw campaignError;
-
+      
       if (existingCampaigns && existingCampaigns.length > 0) {
         throw new Error('A campaign with these media files already exists');
       }

@@ -501,6 +501,7 @@ export default function Settings() {
           <div
             role="region"
             aria-label="Account management section with options to delete account"
+            className="hidden"
           >
             <h2 className="text-lg font-medium text-gray-900 mb-4">Account</h2>
             <div className="space-y-4">
