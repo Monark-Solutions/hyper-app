@@ -10,17 +10,37 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import Select, { SingleValue } from 'react-select';
+import Swal from 'sweetalert2';
+
 import CampaignForm from '@/components/CampaignForm';
 import LoadingOverlay from '@/components/LoadingOverlay';
 import ReportPreview from '@/components/ReportPreview';
 import supabase from '@/lib/supabase';
 import { Campaign } from '@/types/campaign';
 import { ReportData, ScreenInfo } from '@/types/report';
-import Swal from 'sweetalert2';
 
 dayjs.extend(relativeTime);
 
-const inputClasses = 'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm';
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => void;
+  }
+}
+
+interface MediaFile {
+  mediaid: number;
+  medianame: string;
+}
+
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
 
 export default function CampaignsPage() {
   const router = useRouter();
@@ -43,7 +63,11 @@ export default function CampaignsPage() {
   const [reportStartDate, setReportStartDate] = useState('');
   const [reportEndDate, setReportEndDate] = useState('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [selectedMediaForReport, setSelectedMediaForReport] = useState<string>('');
+  const [mediaFilesForReport, setMediaFilesForReport] = useState<MediaFile[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [progress, setProgress] = useState<number>(0);
+  const [progressText, setProgressText] = useState<string>('');
   const reportRef = useRef<HTMLDivElement>(null);
 
   const didFetch = useRef(false);
@@ -108,7 +132,7 @@ export default function CampaignsPage() {
         let progress = 0;
         let timeText = '';
 
-        if (currentDate.isAfter(startDate) && currentDate.isBefore(endDate) || currentDate.isSame(startDate) || currentDate.isSame(endDate)) { // Check if currentDate is between or equal to startDate and endDate
+        if (currentDate.isAfter(startDate) && currentDate.isBefore(endDate) || currentDate.isSame(startDate) || currentDate.isSame(endDate)) {
           state = 'Active';
           const totalDuration = endDate.diff(startDate);
           const elapsed = currentDate.diff(startDate);
@@ -253,6 +277,42 @@ export default function CampaignsPage() {
     setReportEndDate('');
     setReportData(null);
     setReportError(null);
+    setSelectedMediaForReport('');
+    setMediaFilesForReport([]);
+  };
+
+  const fetchMediaFiles = async (campaignId: string) => {
+    try {
+      setIsReportLoading(true);
+      setReportError(null);
+      
+      const { data, error } = await supabase
+        .from('campaignmedia')
+        .select(`
+          media:mediaid (
+            mediaid,
+            medianame
+          )
+        `)
+        .eq('campaignid', campaignId);
+
+      if (error) throw error;
+      
+      // Transform the data to match MediaFile interface
+      const transformedData: MediaFile[] = data
+        .filter((item: any) => item.media)
+        .map((item: any) => ({
+          mediaid: item.media.mediaid,
+          medianame: item.media.medianame
+        }));
+      
+      setMediaFilesForReport(transformedData || []);
+    } catch (err) {
+      console.error('Error fetching media files:', err);
+      setReportError('Failed to fetch media files');
+    } finally {
+      setIsReportLoading(false);
+    }
   };
 
   const handleGenerateReport = async (e: React.FormEvent) => {
@@ -262,69 +322,203 @@ export default function CampaignsPage() {
     try {
       setIsReportLoading(true);
       setReportError(null);
+      setProgress(10);
+      setProgressText('Fetching campaign data...');
 
-      // Fetch screen views
-      const { data: viewsData, error: viewsError } = await supabase
-        .from('screen_views')
-        .select(`
-          screens (
-            screenname,
-            screenlocation
-          ),
-          count
-        `)
-        .eq('campaignid', selectedCampaignForReport.campaignid)
-        .gte('viewdate', reportStartDate)
-        .lte('viewdate', reportEndDate);
+      // Fetch campaign data
+      const { data, error: rpcError } = await supabase.rpc('get_campaign_summary', {
+        _campaignid: selectedCampaignForReport.campaignid,
+        _mediaid: selectedMediaForReport ? parseInt(selectedMediaForReport, 10) : 0,
+        _startdate: reportStartDate,
+        _enddate: reportEndDate
+      });
 
-      if (viewsError) throw viewsError;
+      if (rpcError) throw new Error(rpcError.message);
+      if (!data || data.length === 0) throw new Error('No data found for the selected period');
 
-      // Process data for report
-      const screenInfo: ScreenInfo[] = [];
-      let totalViews = 0;
+      const reportDataValue = data[0];
+      if (!reportDataValue) throw new Error('Report data not available');
+      setReportData(reportDataValue);
+      setProgress(30);
+      setProgressText('Preparing report layout...');
 
-      viewsData?.forEach(view => {
-        if (view.screens && typeof view.screens === 'object' && 'screenname' in view.screens && 'screenlocation' in view.screens) {
-          const screenData: ScreenInfo = {
-            screenname: String(view.screens.screenname),
-            screenlocation: String(view.screens.screenlocation),
-            screentotalviews: Number(view.count) || 0
-          };
-          screenInfo.push(screenData);
-          totalViews += screenData.screentotalviews;
+      // Wait for DOM to update with report data
+      await new Promise<void>(resolve => {
+        setTimeout(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              resolve();
+            }, 500);
+          });
+        }, 0);
+      });
+
+      // Ensure report element exists
+      if (!reportRef.current) {
+        throw new Error('Report layout not ready');
+      }
+
+      setProgress(40);
+      setProgressText('Loading campaign image...');
+
+      // Pre-load image if thumbnail exists
+      if (reportDataValue.thumbnail && reportDataValue.thumbnail !== '') {
+        const tempImg = document.createElement('img');
+        await new Promise<void>((resolve, reject) => {
+          tempImg.onload = () => resolve();
+          tempImg.onerror = () => reject(new Error('Failed to load image'));
+          tempImg.src = `data:image/jpeg;base64,${reportDataValue.thumbnail}`;
+        });
+      }
+
+      setProgress(50);
+      setProgressText('Preparing PDF generation...');
+
+      // Apply styles for PDF generation
+      const style = document.createElement('style');
+      style.setAttribute('data-pdf-styles', 'true');
+      style.innerHTML = `
+        th {
+          background-color: #000000 !important;
+          color: #ffffff !important;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        img {
+          object-fit: contain !important;
+          border-radius: 0.5rem !important;
+        }
+      `;
+      document.head.appendChild(style);
+
+      // Generate high-quality canvas
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: reportRef.current.offsetWidth,
+        height: reportRef.current.offsetHeight,
+        imageTimeout: 0,
+        onclone: (doc) => {
+          // Ensure styles are applied in cloned document
+          doc.head.appendChild(style.cloneNode(true));
         }
       });
 
-      const reportData: ReportData = {
-        campaignname: selectedCampaignForReport.campaignname,
-        startdate: selectedCampaignForReport.startdate,
-        enddate: selectedCampaignForReport.enddate,
-        totalsites: screenInfo.length,
-        totalviews: totalViews,
-        thumbnail: '',
-        screeninfo: screenInfo
-      };
+      setProgress(70);
+      setProgressText('Converting to PDF format...');
 
-      setReportData(reportData);
+      try {
+        // Create PDF
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4',
+          compress: true,
+          putOnlyUsedFonts: true
+        });
 
-      // Generate PDF after a short delay
-      setTimeout(() => {
-        if (reportRef.current) {
-          html2canvas(reportRef.current).then(canvas => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-            pdf.save(`campaign-report-${dayjs().format('YYYY-MM-DD')}.pdf`);
-          });
-        }
-      }, 500);
+        // Get header section only
+        const reportHeaderSection = reportRef.current?.querySelector('table:first-of-type');
+        if (!reportHeaderSection) throw new Error('Report header section not found');
 
-    } catch (err) {
-      setReportError(err instanceof Error ? err.message : 'An error occurred while generating the report');
+        // Convert header section to image
+        const reportHeaderCanvas = await html2canvas(reportHeaderSection as HTMLElement, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+
+        // Add header image to PDF
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const margin = 10;
+        const contentWidth = pdfWidth - (margin * 2);
+        const reportHeaderHeight = (reportHeaderCanvas.height * contentWidth) / reportHeaderCanvas.width;
+        const reportHeaderImgData = reportHeaderCanvas.toDataURL('image/jpeg', 1.0);
+        pdf.addImage(reportHeaderImgData, 'JPEG', margin, margin, contentWidth, reportHeaderHeight);
+
+        // Prepare table data
+        const tableData = reportDataValue.screeninfo.map((screen: ScreenInfo) => [
+          screen.screenname,
+          screen.screenlocation,
+          screen.screentotalviews.toString()
+        ]);
+
+        // Add table using autoTable
+        pdf.autoTable({
+          startY: reportHeaderHeight + margin + 10,
+          head: [[
+            'Screen Name',
+            'Location',
+            'Total Views'
+          ]],
+          body: tableData,
+          theme: 'grid',
+          headStyles: {
+            fillColor: [0, 0, 0],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          styles: {
+            fontSize: 10,
+            cellPadding: 5
+          },
+          columnStyles: {
+            0: { cellWidth: 'auto' },
+            1: { cellWidth: 'auto' },
+            2: { cellWidth: 'auto', halign: 'right' }
+          },
+          didDrawPage: (pageInfo: any) => {
+            // Start table content from top margin on subsequent pages
+            if (pageInfo.pageNumber > 1) {
+              pageInfo.settings.startY = margin;
+            }
+          },
+          showHead: 'everyPage',
+          margin: { top: margin, right: margin, bottom: margin, left: margin }
+        });
+
+        // Generate filename with timestamp
+        const timestamp = dayjs().format('YYYY-MM-DD-HHmmss');
+        const fileName = `campaign-report-${timestamp}.pdf`;
+
+        setProgress(90);
+        setProgressText('Finalizing report...');
+
+        // Save PDF and clean up
+        pdf.save(fileName);
+        document.head.removeChild(style);
+
+        setProgress(100);
+        setProgressText('Report downloaded successfully!');
+
+        // Show success message
+        Swal.fire({
+          title: 'Success!',
+          text: 'Report has been generated and downloaded',
+          icon: 'success'
+        });
+      } catch (pdfError) {
+        console.error('PDF generation error:', pdfError);
+        throw new Error('Failed to generate PDF');
+      }
+
+    } catch (err: any) {
+      setReportError(err.message || 'Failed to generate report');
+      console.error('Error generating report:', err);
+      Swal.fire({
+        title: 'Error',
+        text: err.message || 'Failed to generate report',
+        icon: 'error'
+      });
     } finally {
       setIsReportLoading(false);
+      setProgress(0);
+      setProgressText('');
     }
   };
 
@@ -451,6 +645,16 @@ export default function CampaignsPage() {
                         onClick={() => {
                           setSelectedCampaignForReport(campaign);
                           setIsReportDrawerOpen(true);
+                          setReportError(null);
+                          setMediaFilesForReport([]);
+                          setIsReportLoading(true);
+                          setReportStartDate(campaign.startdate)
+                          setReportEndDate(dayjs().format('YYYY-MM-DD'))
+                          fetchMediaFiles(String(campaign.campaignid)).catch(err => {
+                            console.error('Error loading media files:', err);
+                            setReportError('Failed to fetch media files');
+                            setIsReportLoading(false);
+                          });
                         }}
                       >
                         <BiBarChart size={20} />
@@ -643,6 +847,39 @@ export default function CampaignsPage() {
                           </div>
                         )}
                         <form onSubmit={handleGenerateReport} className="space-y-4 mb-6">
+                          {/* Media Selection */}
+                          <div>
+                            <label htmlFor="media" className="block text-sm font-medium text-gray-700">
+                              Select Media File (Optional)
+                            </label>
+                            <Select<SelectOption>
+                              id="media"
+                              value={selectedMediaForReport ? { 
+                                value: selectedMediaForReport, 
+                                label: mediaFilesForReport.find(m => String(m.mediaid) === selectedMediaForReport)?.medianame || '' 
+                              } : null}
+                              onChange={(newValue: SingleValue<SelectOption>) => setSelectedMediaForReport(newValue?.value || '')}
+                              options={mediaFilesForReport.map(media => ({
+                                value: String(media.mediaid),
+                                label: media.medianame || ''
+                              }))}
+                              isDisabled={isReportLoading}
+                              isClearable={true}
+                              isSearchable={true}
+                              placeholder="Choose a media file"
+                              className="mt-1"
+                              classNames={{
+                                control: (state) => 
+                                  `!border-slate-300 !shadow-sm ${state.isFocused ? '!border-indigo-500 !ring-1 !ring-indigo-500' : ''}`,
+                                input: () => "!text-sm",
+                                option: () => "!text-sm",
+                                placeholder: () => "!text-sm !text-slate-400",
+                                singleValue: () => "!text-sm"
+                              }}
+                            />
+                          </div>
+
+                          {/* Date Range */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">

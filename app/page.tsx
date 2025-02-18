@@ -87,12 +87,12 @@ export default function Home() {
         };
         localStorage.setItem('userDetails', JSON.stringify(userDetails));
 
-        await Swal.fire({
-          title: 'Login Successful!',
-          text: `Welcome back, ${validUser.username}!`,
-          icon: 'success',
-          confirmButtonText: 'OK'
-        });
+        // await Swal.fire({
+        //   title: 'Login Successful!',
+        //   text: `Welcome back, ${validUser.username}!`,
+        //   icon: 'success',
+        //   confirmButtonText: 'OK'
+        // });
         
         // Redirect to dashboard
         window.location.href = '/dashboard';
@@ -147,6 +147,7 @@ export default function Home() {
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your username"
               required
+              autoFocus
             />
           </div>
 

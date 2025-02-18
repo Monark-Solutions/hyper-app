@@ -59,16 +59,16 @@ export default function Reports() {
   const [selectedMedia, setSelectedMedia] = useState<string>('');
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   // Campaign Performance dates
-  const [campaignStartDate, setCampaignStartDate] = useState<string>('');
-  const [campaignEndDate, setCampaignEndDate] = useState<string>('');
+  const [campaignStartDate, setCampaignStartDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [campaignEndDate, setCampaignEndDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
   
   // Screen Performance dates
-  const [screenStartDate, setScreenStartDate] = useState<string>('');
-  const [screenEndDate, setScreenEndDate] = useState<string>('');
+  const [screenStartDate, setScreenStartDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [screenEndDate, setScreenEndDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
   
   // Screen Activity dates
-  const [activityStartDate, setActivityStartDate] = useState<string>('');
-  const [activityEndDate, setActivityEndDate] = useState<string>('');
+  const [activityStartDate, setActivityStartDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [activityEndDate, setActivityEndDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
   const [isLoading, setIsLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [error, setError] = useState<string>('');
@@ -730,6 +730,8 @@ export default function Reports() {
                     setSelectedCampaign(newValue?.value || '');
                     setSelectedMedia('');
                     setMediaFiles([]);
+                    setCampaignStartDate(campaigns.find(c => String(c.campaignid) === newValue?.value)?.startdate || dayjs().format('YYYY-MM-DD'))
+                    setCampaignEndDate(dayjs().format('YYYY-MM-DD'))
                     if (newValue?.value) {
                       fetchMediaFiles(newValue.value);
                     }

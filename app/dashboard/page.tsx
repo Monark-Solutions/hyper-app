@@ -150,7 +150,7 @@ export default function Dashboard() {
             </div>
           </div>
           <p className="mt-4 text-3xl font-semibold text-gray-900">{dashboardData.total_screens}</p>
-          <div className="mt-2 flex items-center text-sm text-gray-600">
+          <div className="mt-2 flex items-center text-sm text-green-600">
             <RiCheckboxCircleLine className="w-4 h-4 mr-1 text-green-500" />
             <span>{dashboardData.active_screens} screens online</span>
           </div>

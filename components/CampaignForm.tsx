@@ -10,6 +10,10 @@ import { Campaign, CampaignFormProps, CampaignScreen, Media, Screen, Tag } from 
 import LoadingOverlay from '@/components/LoadingOverlay';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 // Set access token
 mapboxgl.accessToken = 'pk.eyJ1IjoicmF4aXRnb2hlbCIsImEiOiJjbGF3MGVhajUwOWQ5M3BwNDgydnBkNmR4In0.9UL0prYTv9r5SBXXUIM-9Q';
@@ -37,8 +41,8 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
   }>({
     campaignName: '',
     mediaIds: mediaId ? [mediaId] : [],
-    startDate: '',
-    endDate: '',
+    startDate: dayjs().format('YYYY-MM-DD'),
+    endDate: dayjs().format('YYYY-MM-DD'),
     duration: 7,
   });
 
@@ -358,8 +362,8 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
         setFormData({
           campaignName: campaignData.campaignname,
           mediaIds: mediaData ? mediaData.map(m => m.mediaid) : [],
-          startDate: campaignData.startdate,
-          endDate: campaignData.enddate,
+          startDate: campaignData.startdate || dayjs().format('YYYY-MM-DD'),
+          endDate: campaignData.enddate|| dayjs().format('YYYY-MM-DD'),
           duration: campaignData.duration || 7,
         });
 
