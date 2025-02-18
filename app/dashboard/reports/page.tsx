@@ -709,7 +709,7 @@ export default function Reports() {
         <div className="space-y-6">
           {/* Campaign Performance Section */}
           <div className="border rounded-lg p-6">
-            <h3 className="font-medium text-gray-900 mb-4">Campaign Performance</h3>
+            <h3 className="font-bold text-gray-900 mb-4">Campaign Performance</h3>
             
             {error && (
               <div className="mb-4 p-4 text-sm text-red-700 bg-red-100 rounded-lg">
@@ -840,7 +840,7 @@ export default function Reports() {
 
           {/* Screen Performance Section */}
           <div className="border rounded-lg p-6">
-            <h3 className="font-medium text-gray-900 mb-4">Screen Performance</h3>
+            <h3 className="font-bold text-gray-900 mb-4">Screen Performance</h3>
             
             <form onSubmit={handleGenerateScreenReport} className="space-y-4">
               {/* Date Range */}
@@ -898,7 +898,7 @@ export default function Reports() {
 
           {/* Screen Activity Section */}
           <div className="border rounded-lg p-6">
-            <h3 className="font-medium text-gray-900 mb-4">Screen Activity</h3>
+            <h3 className="font-bold text-gray-900 mb-4">Screen Activity</h3>
             
             <form onSubmit={handleGenerateScreenActivity} className="space-y-4">
               {/* Screen Selection */}
