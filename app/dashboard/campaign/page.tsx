@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Dialog } from '@headlessui/react';
 import { FiX, FiSearch } from 'react-icons/fi';
-import { BiEdit, BiBarChart, BiPlay, BiPause } from 'react-icons/bi';
+import { BiEdit, BiBarChart, BiPlay, BiPause, BiTrash } from 'react-icons/bi';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import html2canvas from 'html2canvas';
@@ -16,6 +16,7 @@ import ReportPreview from '@/components/ReportPreview';
 import supabase from '@/lib/supabase';
 import { Campaign } from '@/types/campaign';
 import { ReportData, ScreenInfo } from '@/types/report';
+import Swal from 'sweetalert2';
 
 dayjs.extend(relativeTime);
 
@@ -187,6 +188,47 @@ export default function CampaignsPage() {
           ? { ...campaign, playstate: playState } 
           : campaign
       ));
+    } catch (err) {
+      console.error('Error updating campaign play state:', err);
+    }
+  };
+
+  const handleDeleteUpdate = async (campaignId: number) => {
+    try {
+      if (!campaignId) return;
+
+      const result = await Swal.fire({
+        title: 'Are you sure?',
+        text: "You won't be able to revert this!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#EF4444',
+        cancelButtonColor: '#6B7280',
+        confirmButtonText: 'Yes, delete it!'
+      });
+      if (result.isConfirmed) {
+        const { error } = await supabase
+          .from('campaigns')
+          .update({ isdeleted: true })
+          .eq('campaignid', campaignId);
+
+        if (error) throw error;
+
+        // Delete existing screen and media associations
+        const { error: deleteScreenError } = await supabase
+          .from('campaignscreens')
+          .delete()
+          .eq('campaignid', campaignId);
+
+        if (deleteScreenError) throw deleteScreenError;
+
+        // refresh list
+        const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+        if (userDetails?.customerId) {
+          loadCampaigns(userDetails.customerId);
+        }
+      }
+
     } catch (err) {
       console.error('Error updating campaign play state:', err);
     }
@@ -447,6 +489,19 @@ export default function CampaignsPage() {
                       </div>
                     )
                   )}
+                  <div className="relative group">
+                      <button 
+                        className="text-gray-600 hover:text-gray-800"
+                        onClick={() => {
+                          handleDeleteUpdate(campaign.campaignid);
+                        }}
+                      >
+                        <BiTrash size={20} />
+                      </button>
+                      <div className="absolute left-1/2 -translate-x-1/2 -top-10 px-2.5 py-1.5 bg-black text-white text-sm rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity">
+                        Delete
+                      </div>
+                    </div>
                 </div>
               </div>
               <div className="mt-3">
