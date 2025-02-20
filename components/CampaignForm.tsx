@@ -96,9 +96,10 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
 
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v11',
+      style: 'mapbox://styles/mapbox/standard',
       center: [174.7633, -41.2865], // Default to New Zealand's center
-      zoom: 8
+      zoom: 8,
+      attributionControl: false // Disable default attribution
     });
 
     // Clean up function
@@ -503,12 +504,28 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
 
   // Handle select all screens
   const handleSelectAll = () => {
-    const newSelected = selectedScreens.size === filteredScreens.length
-      ? new Set<string>()
-      : new Set(filteredScreens.map(s => s.screenid));
+    // Create a new Set from current selection to maintain unfiltered screens' state
+    const newSelected = new Set(selectedScreens);
+    
+    // Check if all filtered screens are currently selected
+    const allFilteredSelected = filteredScreens.every(screen => 
+      selectedScreens.has(screen.screenid)
+    );
+
+    // Toggle filtered screens based on current state
+    filteredScreens.forEach(screen => {
+      if (allFilteredSelected) {
+        // Unselect all filtered screens
+        newSelected.delete(screen.screenid);
+      } else {
+        // Select all filtered screens
+        newSelected.add(screen.screenid);
+      }
+    });
+
     setSelectedScreens(newSelected);
 
-    // Update all marker colors
+    // Update marker colors for filtered screens
     filteredScreens.forEach(screen => {
       const marker = markers.current[screen.screenid];
       if (marker && screen.latitude && screen.longitude) {
@@ -830,7 +847,7 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
                     }}
                     className="text-sm text-gray-500 hover:text-gray-700"
                   >
-                    All
+                    Show All
                   </button>
                 )}
               </div>
@@ -859,7 +876,7 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Search screens..."
+                    placeholder="Search screens by name, location or tag. Type a search term and press Enter ↵"
                     className="flex-1 outline-none bg-transparent min-w-[120px] border-none focus:ring-0"
                   />
                 </div>

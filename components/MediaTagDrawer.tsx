@@ -218,7 +218,7 @@ export default function MediaTagDrawer({ isOpen, onClose, tag, customerId }: Med
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       onKeyDown={handleSearch}
-                      placeholder={searchTags.length === 0 ? "Search Media..." : ""}
+                      placeholder={searchTags.length === 0 ? "Type a search term and press Enter ↵" : ""}
                       className="flex-1 min-w-[150px] outline-none border-none focus:ring-0"
                     />
                   </div>

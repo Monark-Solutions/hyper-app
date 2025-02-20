@@ -224,7 +224,7 @@ export default function ScreenTagDrawer({ isOpen, onClose, tag, customerId }: Sc
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       onKeyDown={handleSearch}
-                      placeholder={searchTags.length === 0 ? "Search Screens..." : ""}
+                      placeholder={searchTags.length === 0 ? "Search Screens by name, location or tag. Type a search term and press Enter ↵" : ""}
                       className="flex-1 min-w-[150px] outline-none border-none focus:ring-0"
                     />
                   </div>

@@ -594,7 +594,7 @@ export default function Screens(): React.ReactElement {
                     setSearchInput('');
                   }
                 }}
-                placeholder={searchTerms.length === 0 ? "Search screens by name, location or tag. Type term and press enter to search." : ""}
+                placeholder={searchTerms.length === 0 ? "Search screens by name, location or tag. Type a search term and press Enter ↵" : ""}
                 className="flex-1 min-w-[150px] outline-none border-none focus:ring-0"
               />
             </div>

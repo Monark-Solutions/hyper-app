@@ -587,7 +587,7 @@ export default function CampaignsPage() {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={searchTags.length === 0 ? "Search campaigns. Type term and press enter to search." : ""}
+                placeholder={searchTags.length === 0 ? "Search campaigns. Type a search term and press Enter ↵" : ""}
                 className="flex-1 outline-none bg-transparent min-w-[120px] border-none focus:ring-0"
               />
             </div>

@@ -810,7 +810,7 @@ export default function Media() {
                   filterMediaItems(selectedMediaType, newTerms);
                 }
               }}
-              placeholder={searchTerms.length === 0 ? "Search media by name, type, size or tag. Type term and press enter to search." : ""}
+              placeholder={searchTerms.length === 0 ? "Search media by name, type, size or tag. Type a search term and press Enter ↵." : ""}
               className="flex-1 min-w-[150px] outline-none border-none focus:ring-0"
             />
           </div>
@@ -1244,7 +1244,7 @@ export default function Media() {
                               onBlur={() => {
                                 setTimeout(() => setShowTagDropdown(false), 200);
                               }}
-                              placeholder="Type tag and press Enter"
+                              placeholder="Select tag or type a new tag name and press Enter ↵"
                               className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
                             />
                             {showTagDropdown && filteredTags.length > 0 && (
