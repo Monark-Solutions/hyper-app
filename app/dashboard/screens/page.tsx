@@ -11,6 +11,7 @@ import supabase from '@/lib/supabase';
 import Swal from 'sweetalert2';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import LoadingOverlay from '@/components/LoadingOverlay';
 
 dayjs.extend(relativeTime);
 
@@ -148,6 +149,7 @@ export default function Screens(): React.ReactElement {
   const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
   const screenNameInputRef = useRef<HTMLInputElement>(null);
   const didFetch = useRef(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const timeOptions = [
     '12:00 AM', '12:30 AM', '01:00 AM', '01:30 AM', '02:00 AM', '02:30 AM',
@@ -215,6 +217,7 @@ export default function Screens(): React.ReactElement {
     }
 
     try {
+      setIsLoading(true);
       // If updateSelected is true, update the updateguid for selected screens
       if (updateSelected && selectedScreens.length > 0) {
         const { error: updateError } = await supabase
@@ -225,6 +228,7 @@ export default function Screens(): React.ReactElement {
         if (updateError) {
           console.error('Error updating screens:', updateError);
           Swal.fire('Error', 'Failed to update selected screens', 'error');
+          setIsLoading(false);
           return;
         }
 
@@ -235,6 +239,7 @@ export default function Screens(): React.ReactElement {
       const userDetails = JSON.parse(userDetailsStr);
       if (!userDetails?.customerId) {
         router.push('/');
+        setIsLoading(false);
         return;
       }
 
@@ -264,6 +269,7 @@ export default function Screens(): React.ReactElement {
       console.error('Error loading data:', error);
       router.push('/');
     }
+    setIsLoading(false);
   };
 
   const loadCampaigns = async (screenId: string) => {
@@ -624,108 +630,111 @@ export default function Screens(): React.ReactElement {
         </div>
 
         {/* Screens Grid */}
-        <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {screens
-            .filter(filterScreens)
-            .map((screen) => (
-              <div 
-                key={screen.id} 
-                className="border p-4 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
-                onClick={(e) => {
-                  // Don't open drawer if clicking checkbox
-                  if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
-                    return;
-                  }
-                  handleScreenClick(screen.screenid);
-                }}
-              >
-                {/* Header with Screen Name and Checkbox */}
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-medium text-gray-900">{screen.screenname}</h3>
-                  <input
-                    type="checkbox"
-                    checked={selectedScreens.includes(screen.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setSelectedScreens(prev => 
-                        prev.includes(screen.id)
-                          ? prev.filter(id => id !== screen.id)
-                          : [...prev, screen.id]
-                      );
-                    }}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                  />
-                </div>
-
-                {/* Content Grid */}
-                <div className="grid grid-cols-[1fr,auto] gap-4">
-                  {/* Left Column - Details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-gray-500">
-                      <div className={`w-3 h-3 rounded-full mr-2 ${
-                        screen.status.toLowerCase() === 'online' 
-                          ? 'bg-green-500' 
-                          : 'bg-red-500'
-                      }`} />
-                      <span>{screen.status}</span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      Last Ping: {new Date(screen.lastpingdatetime).toLocaleString()}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Version: {screen.version}
-                    </p>
-                  </div>
-
-                  {/* Right Column - Progress Circle */}
-                  <div className="w-14 h-14">
-                    {screen.filedownload ? (
-                      (() => {
-                        const [current, total] = screen.filedownload.split('~').map(Number);
-                        const percentage = (current / total) * 100;
-                        
-                        return (
-                          <div 
-                            className="w-full h-full rounded-full flex items-center justify-center relative"
-                            style={{
-                              background: `conic-gradient(#3B82F6 ${percentage}%, transparent ${percentage}%)`,
-                            }}
-                          >
-                            <div className="absolute w-[90%] h-[90%] rounded-full bg-white flex items-center justify-center">
-                              <span className="text-[10px] text-gray-600 whitespace-nowrap">
-                                {current} of {total}
-                              </span>
-                            </div>
-                          </div>
+        <LoadingOverlay active={isLoading}>
+          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {screens
+              .filter(filterScreens)
+              .map((screen) => (
+                <div 
+                  key={screen.id} 
+                  className="border p-4 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
+                  onClick={(e) => {
+                    // Don't open drawer if clicking checkbox
+                    if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
+                      return;
+                    }
+                    handleScreenClick(screen.screenid);
+                  }}
+                >
+                  {/* Header with Screen Name and Checkbox */}
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-medium text-gray-900">{screen.screenname}</h3>
+                    <input
+                      type="checkbox"
+                      checked={selectedScreens.includes(screen.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setSelectedScreens(prev => 
+                          prev.includes(screen.id)
+                            ? prev.filter(id => id !== screen.id)
+                            : [...prev, screen.id]
                         );
-                      })()
-                    ) : (
-                      <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                        <span className="text-xs text-gray-600">N/A</span>
-                      </div>
-                    )}
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
                   </div>
-                </div>
 
-                {/* Tags */}
-                {screen.tags && screen.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-4">
-                    {screen.tags.map((tagId) => {
-                      const tag = tags.find(t => t.tagid === tagId);
-                      return tag && (
-                        <span
-                          key={tag.tagid}
-                          className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700"
-                        >
-                          {tag.tagname}
-                        </span>
-                      );
-                    })}
+                  {/* Content Grid */}
+                  <div className="grid grid-cols-[1fr,auto] gap-4">
+                    {/* Left Column - Details */}
+                    <div className="space-y-2">
+                      <div className="flex items-center text-sm text-gray-500">
+                        <div className={`w-3 h-3 rounded-full mr-2 ${
+                          screen.status.toLowerCase() === 'online' 
+                            ? 'bg-green-500' 
+                            : 'bg-red-500'
+                        }`} />
+                        <span>{screen.status}</span>
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Last Ping: {new Date(screen.lastpingdatetime).toLocaleString()}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Version: {screen.version}
+                      </p>
+                    </div>
+
+                    {/* Right Column - Progress Circle */}
+                    <div className="w-14 h-14">
+                      {screen.filedownload ? (
+                        (() => {
+                          const [current, total] = screen.filedownload.split('~').map(Number);
+                          const percentage = (current / total) * 100;
+                          
+                          return (
+                            <div 
+                              className="w-full h-full rounded-full flex items-center justify-center relative"
+                              style={{
+                                background: `conic-gradient(#3B82F6 ${percentage}%, transparent ${percentage}%)`,
+                              }}
+                            >
+                              <div className="absolute w-[90%] h-[90%] rounded-full bg-white flex items-center justify-center">
+                                <span className="text-[10px] text-gray-600 whitespace-nowrap">
+                                  {current} of {total}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                          <span className="text-xs text-gray-600">N/A</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-        </div>
+
+                  {/* Tags */}
+                  {screen.tags && screen.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-4">
+                      {screen.tags.map((tagId) => {
+                        const tag = tags.find(t => t.tagid === tagId);
+                        return tag && (
+                          <span
+                            key={tag.tagid}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700"
+                          >
+                            {tag.tagname}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        </LoadingOverlay>
+        
       </div>
 
       {isDrawerOpen && (
