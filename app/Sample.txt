@@ -1,0 +1,88 @@
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8" />
+    <script src="js/jquery-3.7.0.min.js"></script>
+    <script src="js/moment-with-locales.min.js"></script>
+    <script src="js/jso.js"></script>
+    <script>
+        var lang = window.navigator.userLanguage || window.navigator.language;
+        var currentTimeZone = new Date().toLocaleDateString('en-US', { day: '2-digit', timeZoneName: 'long', }).slice(4);
+        var params = new URLSearchParams(window.location.search);
+        var userid = 0;
+        var accesstoken = '';
+        if (params.get('code') == null) {
+            console.log("new")
+            let client = new jso.JSO({
+                client_id: "e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL",
+                redirect_uri: "http://localhost/signageCMS/pwpop.html",
+                authorization: "https://api.postermywall.com/v1/oauth/authorize",
+                scopes: { request: ["https://api.postermywall.com/v1/oauth/token"] }
+            });
+            client.callback();
+            client.getToken()
+                .then((token) => {
+                    console.log("I got the token: ", token)
+                })
+        }
+        else {
+            var myKey = "Basic " + btoa('e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL:fs0FZyHn7fuju5wI');
+            console.log(myKey)
+            var body = {
+                grant_type: 'authorization_code',
+                redirect_uri: 'http://localhost/signageCMS/pwpop.html',
+                code: params.get('code')
+            };
+
+            $.ajax({
+                url: 'https://api.postermywall.com/v1/oauth/token/',
+                type: 'POST',
+                dataType: 'json',
+                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+                headers: {
+                    "Authorization": myKey,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                data: body, /* right */
+                success: function (result) {
+                    //called when successful
+
+                    userid = result.user_id;
+                    accesstoken = 'Bearer ' + result.access_token;
+                    console.log(accesstoken);
+                    var url = 'https://api.postermywall.com/v1/users/' + userid + '/designs/{designid}/latest-download';
+                    $.ajax({
+                        url: url,
+                        type: 'GET',
+                        headers: {
+                            "Authorization": accesstoken
+                        },
+                        //data: { 'offset': 0, 'limit': 20 },
+                        dataType: "json", // dataType is json format
+                        //contentType: "application/json; charset=utf-8",
+                        success: function (result) {
+                            console.log(result);
+                        },
+                        error: function (result) {
+                            console.log(result);
+                        }
+                    }
+                    );
+                   
+                },
+
+                error: function (result) {
+                    //called when there is an error
+                    console.log(result);
+                },
+            });
+        }
+
+
+    </script>
+
+</head>
+<body>
+
+</body>
+</html>

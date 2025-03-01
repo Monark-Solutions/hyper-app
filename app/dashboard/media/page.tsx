@@ -737,21 +737,160 @@ export default function Media() {
     }
   }, []); // Empty dependency array since we're using didFetch ref
 
+  // Add message handler using ref to prevent recreation
+  const handleEditorMessage = useCallback(async (event: MessageEvent) => {
+    console.log('Received message:', event.data);
+    if (event.data?.type === 'DESIGN_SAVED' && event.data?.designurl) {
+      console.log('Design saved:', event.data?.designurl);
+      
+      try {
+        // 1. Convert URL to File object
+        const response = await fetch(event.data.designurl);
+        const blob = await response.blob();
+        const file = new File([blob], 'design.png', { type: 'image/png' });
+
+        // 2. Get thumbnail, resolution and size
+        const thumbnail = await generateThumbnail(file);
+        const resolution = await getFileResolution(file);
+        const size = formatFileSize(file.size);
+
+        // 3. Create Swal dialog with loading state handling
+        const { value: fileName, dismiss } = await Swal.fire({
+          title: 'Import Design',
+          html: `
+            <input type="text" id="fileName" class="swal2-input" placeholder="Enter File Name">
+            <div class="mt-4">
+              <img src="data:image/jpeg;base64,${thumbnail}" class="mx-auto max-w-full h-auto">
+              <div class="mt-2 text-sm text-gray-600">
+                <span>Resolution: ${resolution}</span>
+                <span class="mx-2">•</span>
+                <span>Size: ${size}</span>
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: 'Import',
+          showLoaderOnConfirm: true,
+          preConfirm: async () => {
+            const fileName = (document.getElementById('fileName') as HTMLInputElement).value;
+            if (!fileName) {
+              Swal.showValidationMessage('Please enter a file name');
+              return false;
+            }
+
+            try {
+              // 1. Get customerId
+              const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+              const customerId = userDetails?.customerId;
+              if (!customerId) {
+                throw new Error('User details not found');
+              }
+
+              // 2. Upload to storage bucket
+              const { data: storageData, error: storageError } = await supabase.storage
+                .from('MediaLibrary')
+                .upload(`${customerId}/${fileName}`, file);
+
+              if (storageError) throw storageError;
+
+              // 3. Add record to media table
+              const { data: mediaData, error: mediaError } = await supabase
+                .from('media')
+                .insert([{
+                  customerid: customerId,
+                  medianame: fileName,
+                  thumbnail: thumbnail,
+                  uploaddatetime: new Date().toISOString(),
+                  mediasize: size,
+                  mediaresolution: resolution
+                }])
+                .select();
+
+              if (mediaError) throw mediaError;
+
+              return true;
+            } catch (error) {
+              Swal.showValidationMessage(
+                `Import failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+              );
+              return false;
+            }
+          },
+          allowOutsideClick: () => !Swal.isLoading()
+        });
+
+        // Handle successful import
+        if (fileName) {
+          // Show success message
+          await Swal.fire({
+            title: 'Success',
+            text: 'Design imported successfully!',
+            icon: 'success',
+            timer: 2000,
+            showConfirmButton: false
+          });
+
+          // Refresh media list
+          const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
+          const customerId = userDetails?.customerId;
+          if (customerId) {
+            loadMediaItems(customerId, 1, false, selectedMediaType, searchTerms);
+          }
+        }
+      } catch (error) {
+        console.error('Error handling design:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Failed to process design',
+          icon: 'error'
+        });
+      }
+    } else if (event.data?.type === 'EDITOR_CLOSED') {
+      console.log('Editor closed');
+    }
+  }, [selectedMediaType, searchTerms]);
+
+  useEffect(() => {
+    window.addEventListener('message', handleEditorMessage);
+    return () => window.removeEventListener('message', handleEditorMessage);
+  }, [handleEditorMessage]);
+
+  // Add editor opener
+  const openEditor = () => {
+    const editorWindow = window.open(
+      '/editor.html',
+      'PosterMyWall Editor',
+      'width=1200,height=800,menubar=no,toolbar=no,location=no,status=no,titlebar=no'
+    );
+
+    if (!editorWindow) {
+      alert('Please allow popups to use the editor');
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow p-6">
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Media Library</h1>
-        <button
-          onClick={() => {
-            setIsUploadDrawerOpen(true);
-            setUploadProgress({});
-          }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
-        >
-          <FiUpload className="w-4 h-4" />
-          Upload Media
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={openEditor}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+          >
+            Design with PosterMyWall
+          </button>
+          <button
+            onClick={() => {
+              setIsUploadDrawerOpen(true);
+              setUploadProgress({});
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+          >
+            <FiUpload className="w-4 h-4" />
+            Upload Media
+          </button>
+        </div>
       </div>
 
       {/* Filter Buttons */}

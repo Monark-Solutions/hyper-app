@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta charset="UTF-8" />
+    <title>PosterMyWall Editor</title>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
+    <script>
+        // Get browser language and timezone
+        var lang = window.navigator.userLanguage || window.navigator.language;
+        var currentTimeZone = new Date().toLocaleDateString('en-US', { 
+            day: '2-digit', 
+            timeZoneName: 'long' 
+        }).slice(4);
+
+        // JSO implementation
+        class JSO {
+            constructor(config) {
+                this.config = config;
+            }
+
+            callback() {
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get('code');
+                if (code) {
+                    return code;
+                }
+                return null;
+            }
+
+            getToken() {
+                const code = this.callback();
+                if (!code) {
+                    // Redirect to authorization
+                    const authUrl = new URL(this.config.authorization);
+                    authUrl.searchParams.append('client_id', this.config.client_id);
+                    authUrl.searchParams.append('redirect_uri', this.config.redirect_uri);
+                    authUrl.searchParams.append('response_type', 'code');
+                    authUrl.searchParams.append('scope', this.config.scopes.request.join(' '));
+                    window.location.href = authUrl.toString();
+                    return new Promise(() => {}); // Never resolves since we're redirecting
+                }
+                return Promise.resolve({ code });
+            }
+        }
+
+        // Global error handler
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('Global error:', { msg, url, line, col, error });
+            return false;
+        };
+
+        // Listen for any editor events
+        window.addEventListener('message', function (event) {
+                //console.log('Window message received:', event.data);
+                // Check if message is from editor iframe
+                const editorFrame = document.querySelector('iframe');
+                if (editorFrame && event.source === editorFrame.contentWindow) {
+                    if (event.data.toString().split('~').length > 0) {
+                        if (event.data.toString().split('~')[0] == "FreebieURL") {
+                            //console.log('Message from editor iframe:', event.data);
+                            window.opener?.postMessage({
+                                type: 'DESIGN_SAVED',
+                                designurl: event.data.toString().split('~')[1],
+                            }, '*');
+                            window.PMW.plugin.editor.close();
+                            window.close();
+                        }
+                    }
+                }
+            });
+
+        // Listen for editor-specific events
+        ['save', 'design-save', 'editor-save', 'pmw-save'].forEach(eventName => {
+            window.addEventListener(eventName, function(e) {
+                console.log(`Caught ${eventName} event:`, e);
+            }, true); // Use capture phase
+        });
+
+        // Main initialization
+        $(document).ready(function() {
+            // Set up mutation observer to monitor editor container
+            const container = document.getElementById('pmw-editor-container');
+            if (container) {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                            const iframe = document.querySelector('iframe');
+                            if (iframe) {
+                                console.log('Editor iframe detected:', {
+                                    src: iframe.src,
+                                    id: iframe.id,
+                                    name: iframe.name
+                                });
+                                try {
+                                    // Try to access iframe content
+                                    const iframeContent = iframe.contentWindow || iframe.contentDocument;
+                                    if (iframeContent) {
+                                        console.log('Iframe content accessible');
+                                        // Listen for events from iframe
+                                        iframe.addEventListener('load', () => {
+                                            console.log('Iframe loaded');
+                                        });
+                                    }
+                                } catch (e) {
+                                    console.error('Cannot access iframe content:', e);
+                                }
+                            }
+                        }
+                    });
+                });
+
+                // Start observing the container
+                observer.observe(container, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+
+            if (!code) {
+                console.log("Starting new OAuth flow");
+                let client = new JSO({
+                    client_id: "e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL",
+                    redirect_uri: window.location.href.split('?')[0],
+                    authorization: "https://api.postermywall.com/v1/oauth/authorize",
+                    scopes: { request: ["https://api.postermywall.com/v1/oauth/token"] }
+                });
+                client.callback();
+                client.getToken()
+                    .then((token) => {
+                        console.log("Got token:", token);
+                    })
+                    .catch((error) => {
+                        console.error('OAuth error:', error);
+                    });
+            } else {
+                console.log("Exchanging code for token");
+                const authHeader = "Basic " + btoa('e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL:fs0FZyHn7fuju5wI');
+                $.ajax({
+                    url: 'https://api.postermywall.com/v1/oauth/token/',
+                    type: 'POST',
+                    dataType: 'json',
+                    contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+                    headers: {
+                        "Authorization": authHeader,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    data: {
+                        grant_type: 'authorization_code',
+                        redirect_uri: window.location.href.split('?')[0],
+                        code: code
+                    },
+                    success: function(result) {
+                        console.log('Token exchange success:', result);
+                        const userId = result.user_id;
+                        const accessToken = 'Bearer ' + result.access_token;
+
+                        console.log('Setting up editor initialization callback');
+                        // Set editor callback before loading script
+                        window.pmwPluginEditorInit = function() {
+                            console.log('Editor initialization callback triggered');
+                            if (window.PMW?.plugin?.editor) {
+                                console.log('PMW editor plugin found, opening editor');
+                                try {
+                                    console.log('Editor configuration:', {
+                                        container: document.getElementById('pmw-editor-container') ? 'found' : 'not found',
+                                        mode: 'export',
+                                        elementsToHide: ['download', 'file', 'upgrade']
+                                    });
+                                    // Store editor instance globally for debugging
+                                    window.editorInstance = window.PMW.plugin.editor;
+                                    console.log('Editor methods available:', Object.keys(window.editorInstance));
+
+                                    // Add event listeners for editor events
+                                    document.addEventListener('pmw-editor-save', function(e) {
+                                        console.log('Editor save event detected:', e.detail);
+                                    });
+                                    document.addEventListener('pmw-editor-ready', function(e) {
+                                        console.log('Editor ready event detected:', e.detail);
+                                    });
+
+                                    // Create a save handler that will be used for all save events
+                                    function handleSave(designId) {
+                                        console.log('Save handler called with designId:', designId);
+                                        if (!designId) {
+                                            console.error('No designId provided to save handler');
+                                            return;
+                                        }
+
+                                        //var url = 'https://api.postermywall.com/v1/users/' + userId + '/downloads';
+                                        
+                                        var url = 'https://api.postermywall.com/v1/users/' + userId + '/designs/' + designId + '/latest-download'
+                                        $.ajax({
+                                            url: url,
+                                            type: 'GET',
+                                            headers: {
+                                                "Authorization": accessToken
+                                            },
+                                            //data: { 'offset': 0, 'limit': 20 },
+                                            dataType: "json", // dataType is json format
+                                            //contentType: "application/json; charset=utf-8",
+                                            success: function (result) {
+                                                console.log(result);
+                                            },
+                                            error: function (result) {
+                                                console.log(result);
+                                            }
+                                        }
+                                        );
+                                        // Always notify parent window about the save
+                                        window.opener?.postMessage({ 
+                                            type: 'DESIGN_SAVED',
+                                            designId: designId,
+                                            // Include minimal download info since we can't access the API
+                                            download: {
+                                                designId: designId,
+                                                timestamp: new Date().toISOString()
+                                            }
+                                        }, '*');
+
+                                        // Log the save for debugging
+                                        console.log('Design saved, notified parent window:', designId);
+
+                                        // Return resolved promise to prevent editor errors
+                                        return Promise.resolve();
+                                    }
+
+                                    window.PMW.plugin.editor.open({
+                                        container: 'pmw-editor-container',
+                                        mode: 'export',
+                                        elementsToHide: ['download', 'file', 'upgrade'],
+                                        onSave: function(designId) {
+                                            console.log('onSave triggered in editor config');
+                                            return handleSave(designId);
+                                        },
+                                        onClose: () => {
+                                            window.opener?.postMessage({ type: 'EDITOR_CLOSED' }, '*');
+                                            window.close();
+                                        }
+                                    }).then(() => {
+                                        console.log('Editor opened successfully');
+                                        // Verify save callback is registered
+                                        const editorInstance = window.PMW.plugin.editor;
+                                        console.log('Editor instance:', {
+                                            hasOnSave: typeof editorInstance.onSave === 'function',
+                                            availableMethods: Object.keys(editorInstance)
+                                        });
+                                    }).catch(error => {
+                                        console.error('Error opening editor:', error);
+                                    });
+                                } catch (error) {
+                                    console.error('Exception while opening editor:', error);
+                                }
+                            } else {
+                                console.error('PMW editor plugin not available:', {
+                                    hasPMW: !!window.PMW,
+                                    hasPlugin: !!window.PMW?.plugin,
+                                    hasEditor: !!window.PMW?.plugin?.editor
+                                });
+                            }
+                        };
+
+                        console.log('Loading editor script');
+                        // Load editor script using IIFE pattern
+                        (function(d, s, id) {
+                            var js, pjs = d.getElementsByTagName(s)[0];
+                            if (d.getElementById(id)) return;
+                            js = d.createElement(s);
+                            js.id = id;
+                            js.src = "https://d1csarkz8obe9u.cloudfront.net/plugins/editor/postermywall-editor-v3.js";
+                            js.onerror = function() {
+                                console.error('Failed to load editor script');
+                            };
+                            js.onload = function() {
+                                console.log('Editor script loaded successfully');
+                                if (!window.PMW) {
+                                    console.error('PMW object not found after script load');
+                                } else {
+                                    console.log('PMW object state:', {
+                                        hasPlugin: !!window.PMW.plugin,
+                                        hasEditor: !!window.PMW.plugin?.editor,
+                                        editorMethods: Object.keys(window.PMW.plugin?.editor || {})
+                                    });
+                                }
+                            };
+                            pjs.parentNode.insertBefore(js, pjs);
+                        }(document, 'script', 'pmw-plugin-editor'));
+                    },
+                    error: function(error) {
+                        console.error('Token exchange error:', error);
+                    }
+                });
+            }
+        });
+    </script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #pmw-editor-container {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="pmw-editor-container"></div>
+</body>
+</html>
