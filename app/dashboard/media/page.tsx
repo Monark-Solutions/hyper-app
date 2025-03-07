@@ -57,7 +57,7 @@ export default function Media() {
   const [isUploadDrawerOpen, setIsUploadDrawerOpen] = useState(false);
   const [isPropertiesDrawerOpen, setIsPropertiesDrawerOpen] = useState(false);
   const [isCampaignDrawerOpen, setIsCampaignDrawerOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
   const [selectedMediaItem, setSelectedMediaItem] = useState<MediaItem | null>(null);
   const [activeTab, setActiveTab] = useState<'properties' | 'campaigns'>('properties');
   const [campaigns, setCampaigns] = useState<CampaignWithState[]>([]);
@@ -747,7 +747,15 @@ export default function Media() {
         // 1. Convert URL to File object
         const response = await fetch(event.data.designurl);
         const blob = await response.blob();
-        const file = new File([blob], 'design.png', { type: 'image/png' });
+        var tempFileName = 'design.png';
+        var tempFileType = 'image/png';
+        var fileExt = ".png";
+        if(event.data.designurl?.toString().indexOf(".mp4") > -1){
+          tempFileName = 'design.mp4';
+          tempFileType= 'video/mp4';
+          fileExt = ".mp4";
+        }
+        const file = new File([blob], tempFileName, { type: tempFileType });
 
         // 2. Get thumbnail, resolution and size
         const thumbnail = await generateThumbnail(file);
@@ -772,12 +780,13 @@ export default function Media() {
           confirmButtonText: 'Import',
           showLoaderOnConfirm: true,
           preConfirm: async () => {
-            const fileName = (document.getElementById('fileName') as HTMLInputElement).value;
+            var fileName = (document.getElementById('fileName') as HTMLInputElement).value;
             if (!fileName) {
               Swal.showValidationMessage('Please enter a file name');
               return false;
             }
-
+            fileName += fileExt;
+            //console.log(fileName);
             try {
               // 1. Get customerId
               const userDetails = JSON.parse(localStorage.getItem('userDetails') || '{}');
