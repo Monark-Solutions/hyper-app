@@ -124,7 +124,8 @@
             if (!code) {
                 console.log("Starting new OAuth flow");
                 let client = new JSO({
-                    client_id: "e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL",
+                    //client_id: "e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL",
+                    client_id: "vq4nEFMZAIWUT2NoHhXSfaCPfPBhKGpi",
                     redirect_uri: window.location.href.split('?')[0],
                     authorization: "https://api.postermywall.com/v1/oauth/authorize",
                     scopes: { request: ["https://api.postermywall.com/v1/oauth/token"] }
@@ -139,7 +140,8 @@
                     });
             } else {
                 console.log("Exchanging code for token");
-                const authHeader = "Basic " + btoa('e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL:fs0FZyHn7fuju5wI');
+                //const authHeader = "Basic " + btoa('e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL:fs0FZyHn7fuju5wI');
+                const authHeader = "Basic " + btoa('vq4nEFMZAIWUT2NoHhXSfaCPfPBhKGpi:r00Otg8Appxg8TZG');
                 $.ajax({
                     url: 'https://api.postermywall.com/v1/oauth/token/',
                     type: 'POST',
