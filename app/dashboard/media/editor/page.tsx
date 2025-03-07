@@ -4,9 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Script from 'next/script';
 
 // OAuth Configuration
-const CLIENT_KEY = 'e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL';
-const CLIENT_SECRET = 'fs0FZyHn7fuju5wI';
-const REDIRECT_URI = 'http://localhost:3000/dashboard/media/editor';
+// const CLIENT_KEY = 'e9DCzLMeQ84S0rpaHvCJ1hjDkJvprrOL';
+// const CLIENT_SECRET = 'fs0FZyHn7fuju5wI';
+// const REDIRECT_URI = 'http://localhost:3000/dashboard/media/editor';
+
+const CLIENT_KEY = 'vq4nEFMZAIWUT2NoHhXSfaCPfPBhKGpi';
+const CLIENT_SECRET = 'r00Otg8Appxg8TZG';
+const REDIRECT_URI = 'http://cms.infokliks.com/dashboard/media/editor';
 
 // Editor Configuration
 const EDITOR_SCRIPT_URL = 'https://d1csarkz8obe9u.cloudfront.net/plugins/editor/postermywall-editor-v3.js';
