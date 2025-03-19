@@ -28,10 +28,8 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
   const [selectedScreens, setSelectedScreens] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [searchTags, setSearchTags] = useState<string[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
   const [showFilteredOnly, setShowFilteredOnly] = useState(false);
   const [showAllLink, setShowAllLink] = useState(false);
-  const screensPerPage = 100;
   const [formData, setFormData] = useState<{
     campaignName: string;
     mediaIds: number[];
@@ -708,11 +706,6 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
 
   const inputClasses = "mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
 
-  // Get current page's screens
-  const indexOfLastScreen = currentPage * screensPerPage;
-  const indexOfFirstScreen = indexOfLastScreen - screensPerPage;
-  const currentScreens = filteredScreens.slice(indexOfFirstScreen, indexOfLastScreen);
-
   return (
     <div className="w-full h-full px-4 md:px-6 relative">
       <LoadingOverlay active={isLoading} />
@@ -920,7 +913,7 @@ export default function CampaignForm({ campaignId, mediaId, isSaving, setIsSavin
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {currentScreens.map((screen) => (
+                  {filteredScreens.map((screen) => (
                     <tr 
                       key={screen.screenid}
                       className={`${selectedScreens.has(screen.screenid) ? 'bg-indigo-50' : 'hover:bg-gray-50'} cursor-pointer`}

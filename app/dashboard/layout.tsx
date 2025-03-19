@@ -131,7 +131,12 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
   const handleProfileUpdate = async (e: React.FormEvent, isNewUser: boolean = false) => {
     e.preventDefault();
-    if (!user?.username || !profileData) return;
+    if (!user?.username) return;
+    if (isManagingUser) {
+      if (!managedUser) return;
+    } else {
+      if (!profileData) return;
+    }
 
     try {
       setIsLoading(true);

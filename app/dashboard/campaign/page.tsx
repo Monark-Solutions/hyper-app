@@ -116,14 +116,20 @@ export default function CampaignsPage() {
     try {
       const { data: campaignsData, error } = await supabase
         .from('campaigns')
-        .select('*')
+        .select(`
+          *,
+          screencount:campaignscreens(count)
+        `)
         .eq('isdeleted', false)
         .eq('customerid', customerId)
-        .order('campaignid', { ascending: false });
+        .order('campaignid', { ascending: false })
+        .limit(1000);
 
       if (error) throw error;
 
       const processedCampaigns = (campaignsData || []).map(campaign => {
+        // Extract screen count from the nested count query
+        const screenCount = campaign.screencount?.[0]?.count || 0;
         const currentDate = dayjs();
         const startDate = dayjs(campaign.startdate);
         const endDate = dayjs(campaign.enddate);
@@ -163,9 +169,12 @@ export default function CampaignsPage() {
           if (currentDate.isSame(endDate, 'day')) {
             timeText = 'Ended Today';
           } else {
-            timeText = `Ended ${endDate.fromNow()}`;
+          timeText = `Ended ${endDate.fromNow()}`;
           }
         }
+
+        // Append screen count to timeText
+        timeText = `${timeText} • ${screenCount} Screens`;
 
         return {
           ...campaign,
