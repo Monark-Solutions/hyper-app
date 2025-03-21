@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import LoadingOverlay from '@/components/LoadingOverlay';
 import { useRouter } from 'next/navigation';
 import { 
   RiMegaphoneLine, 
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const [userDetails, setUserDetails] = useState<UserDetails | null>(null);
   const [dashboardData, setDashboardData] = useState<DashboardSummary | null>(null);
   const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const storedDetails = localStorage.getItem('userDetails');
@@ -64,6 +66,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (userDetails?.customerId) {
       const fetchDashboardData = async () => {
+        setIsLoading(true);
         try {
           const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
           //console.log('Fetching data for customer:', userDetails.customerId);
@@ -101,6 +104,8 @@ export default function Dashboard() {
           }
         } catch (err) {
           console.error('Error in fetchDashboardData:', err);
+        } finally {
+          setIsLoading(false);
         }
       };
 
@@ -108,19 +113,22 @@ export default function Dashboard() {
     }
   }, [userDetails]);
 
-  if (!userDetails || !dashboardData) return null;
+  if (!userDetails || !dashboardData) {
+    return <LoadingOverlay active={isLoading} />;
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 text-white">
-        <h1 className="text-3xl font-bold">
-          Welcome back, {userDetails.username}!
-        </h1>
-        <p className="mt-2 text-blue-100">
-          Here&apos;s an overview of your digital signage operations.
-        </p>
-      </div>
+    <LoadingOverlay active={isLoading}>
+      <div className="space-y-6">
+        {/* Welcome Section */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-6 text-white">
+          <h1 className="text-3xl font-bold">
+            Welcome back, {userDetails.username}!
+          </h1>
+          <p className="mt-2 text-blue-100">
+            Here&apos;s an overview of your digital signage operations.
+          </p>
+        </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -224,7 +232,8 @@ export default function Dashboard() {
             );
           })}
         </div>
+        </div>
       </div>
-    </div>
+    </LoadingOverlay>
   );
 }

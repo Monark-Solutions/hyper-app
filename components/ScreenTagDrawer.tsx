@@ -31,8 +31,12 @@ export default function ScreenTagDrawer({ isOpen, onClose, tag, customerId }: Sc
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [allSelected, setAllSelected] = useState(false);
+  const [viewMode, setViewMode] = useState<'all' | 'selected'>('all');
 
-  // Filter screens based on search tags
+  // Get count of selected screens
+  const selectedCount = screens.filter(screen => screen.associated).length;
+
+  // Filter screens based on search tags and view mode
   const filterScreens = (items: Screen[]) => {
     if (searchTags.length === 0) return items;
 
@@ -47,7 +51,10 @@ export default function ScreenTagDrawer({ isOpen, onClose, tag, customerId }: Sc
     );
   };
 
-  const filteredScreens = filterScreens(screens);
+  const searchFilteredScreens = filterScreens(screens);
+  const filteredScreens = viewMode === 'selected' 
+    ? searchFilteredScreens.filter(screen => screen.associated)
+    : searchFilteredScreens;
 
   // Handle select all checkbox change
   const handleSelectAll = (checked: boolean) => {
@@ -248,6 +255,26 @@ export default function ScreenTagDrawer({ isOpen, onClose, tag, customerId }: Sc
                     </button>
                   )}
                 </div>
+              </div>
+
+              {/* View Filter */}
+              <div className="px-6 py-3 border-b border-gray-200 flex items-center gap-4">
+                {selectedCount > 0 && viewMode === 'all' && (
+                  <button
+                    onClick={() => setViewMode('selected')}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    Show Selected ({selectedCount})
+                  </button>
+                )}
+                {viewMode === 'selected' && (
+                  <button
+                    onClick={() => setViewMode('all')}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    Show All
+                  </button>
+                )}
               </div>
 
               {/* Screen List */}

@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { FiSearch, FiX, FiCheckSquare, FiRefreshCw, FiTrash2, FiSend } from 'react-icons/fi';
+import { RiComputerFill } from 'react-icons/ri';
 import { ActionMeta, MultiValue, GroupBase } from 'react-select';
 import CreatableSelect from 'react-select/creatable';
 import Select from 'react-select';
@@ -150,6 +151,8 @@ export default function Screens(): React.ReactElement {
   const screenNameInputRef = useRef<HTMLInputElement>(null);
   const didFetch = useRef(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [totalOnline, setTotalOnline] = useState(0);
+  const [totalOffline, setTotalOffline] = useState(0);
 
   const timeOptions = [
     '12:00 AM', '12:30 AM', '01:00 AM', '01:30 AM', '02:00 AM', '02:30 AM',
@@ -490,6 +493,14 @@ export default function Screens(): React.ReactElement {
     }
   };
 
+  // Calculate totals whenever screens data changes
+  useEffect(() => {
+    const onlineCount = screens.filter(screen => screen.status.toLowerCase() === 'online').length;
+    const offlineCount = screens.length - onlineCount;
+    setTotalOnline(onlineCount);
+    setTotalOffline(offlineCount);
+  }, [screens]);
+
   useEffect(() => {
     if (didFetch.current) return;
     didFetch.current = true;
@@ -559,13 +570,13 @@ export default function Screens(): React.ReactElement {
               onClick={() => setSelectedStatus('online')}
               className={`${selectedStatus === 'online' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-700'} text-sm`}
             >
-              Online
+              Online ({totalOnline})
             </button>
             <button 
               onClick={() => setSelectedStatus('offline')}
               className={`${selectedStatus === 'offline' ? 'text-blue-600 font-medium' : 'text-gray-500 hover:text-gray-700'} text-sm`}
             >
-              Offline
+              Offline ({totalOffline})
             </button>
           </div>
 
@@ -648,7 +659,10 @@ export default function Screens(): React.ReactElement {
                 >
                   {/* Header with Screen Name and Checkbox */}
                   <div className="flex justify-between items-start mb-4">
-                    <h3 className="font-medium text-gray-900">{screen.screenname}</h3>
+                    <div className="flex items-center gap-2">
+                      <RiComputerFill className={`w-5 h-5 ${screen.status.toLowerCase() === 'online' ? 'text-green-500' : 'text-red-500'}`} />
+                      <h3 className="font-medium text-gray-900">{screen.screenname}</h3>
+                    </div>
                     <input
                       type="checkbox"
                       checked={selectedScreens.includes(screen.id)}
@@ -668,14 +682,14 @@ export default function Screens(): React.ReactElement {
                   <div className="grid grid-cols-[1fr,auto] gap-4">
                     {/* Left Column - Details */}
                     <div className="space-y-2">
-                      <div className="flex items-center text-sm text-gray-500">
+                      {/* <div className="flex items-center text-sm text-gray-500">
                         <div className={`w-3 h-3 rounded-full mr-2 ${
                           screen.status.toLowerCase() === 'online' 
                             ? 'bg-green-500' 
                             : 'bg-red-500'
                         }`} />
                         <span>{screen.status}</span>
-                      </div>
+                      </div> */}
                       <p className="text-sm text-gray-500">
                         Last Ping: {new Date(screen.lastpingdatetime).toLocaleString()}
                       </p>
